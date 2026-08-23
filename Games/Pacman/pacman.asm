@@ -99,6 +99,7 @@ BonusFrameCounter = $53 									; tracks bonus frames.
 Death = $54 												; set to non-zero when died (e.g. ghost collision)
 Outstanding100Points = $55 									; the number of outstanding units of 100 points to be added to the score
 ColourState = $56 											; COLOUR: which palette is currently loaded (0 normal, 1 power-pill)
+BaseColour = 7 												; COLOUR: the board itself -- white, so a coloured cell means a sprite
 ;
 ;	These are the six sprites : Player (0) Ghosts (1-4) Bonus (5) all of which are 16 bytes ong
 ;
@@ -1753,22 +1754,18 @@ Dead:	br 		Dead
 		.org 	$A00 										; a spare cartridge page: $400-$7FF and $C00-$DFF are both full
 
 ColourInit:
-		ldi 	$0B 										; RD = $B00, the colour RAM window
+		ldi 	$0B 										; lay down the base colour, then into the game
 		phi 	rd
 		ldi 	0
 		plo 	rd
-		ldi 	>ColourTable 								; RE = the table
-		phi 	re
-		ldi 	<ColourTable
-		plo 	re
 CI_Loop:
-		lda 	re 											; next table byte, bump RE
-		str 	rd 											; write the colour cell
+		ldi 	BaseColour
+		str 	rd
 		inc 	rd
-		glo 	rd 											; done all 64?
+		glo 	rd
 		xri 	64
 		bnz 	CI_Loop
-		lbr 	StartGame 									; into the game proper
+		lbr 	StartGame
 
 ; ---------------------------------------------------------------------------------------------------------------------------------------
 ;	FrameColour - called once per frame from the main loop.
@@ -1833,43 +1830,89 @@ FC_FillLoop:
 		br 		FC_Done
 
 FC_NotChasing:
-		ldi 	ColourState 								; already back to normal? then nothing to do
+		ldi 	ColourState 								; mark that the normal palette is in use
 		plo 	ra
-		ldn 	ra
-		bz 		FC_Done
 		ldi 	0
 		str 	ra
-		ldi 	$0B 										; reload the normal band table
+															; fall through into SpriteColour
+
+; ---------------------------------------------------------------------------------------------------------------------------------------
+;	SpriteColour - repaint the board, then give every live sprite its own colour.
+;
+;	Fills all 64 cells with BaseColour, then for each of the six sprite records writes that sprite's colour into the single cell
+;	containing its centre. Sprites are 5x4 and cells are 8x4, so the sprite is mostly-but-not-entirely inside that cell -- see
+;	COLOUR.md for the measurement. This is the experiment that decides whether the geometry is worth rewriting.
+; ---------------------------------------------------------------------------------------------------------------------------------------
+
+SpriteColour:
+		sex 	r2 											; the stack, for the one add below
+		ldi 	$0B
 		phi 	rd
 		ldi 	0
 		plo 	rd
-		ldi 	>ColourTable
-		phi 	re
-		ldi 	<ColourTable
-		plo 	re
-FC_RestoreLoop:
-		lda 	re
+SC_Fill:
+		ldi 	BaseColour
 		str 	rd
 		inc 	rd
 		glo 	rd
 		xri 	64
-		bnz 	FC_RestoreLoop
+		bnz 	SC_Fill
+
+		ldi 	>SpriteColours 								; RE -> the per-sprite colours
+		phi 	re
+		ldi 	<SpriteColours
+		plo 	re
+		ldi 	SpriteStorage 								; RA -> first sprite record
+		plo 	ra
+SC_Sprite:
+		inc 	ra 											; third byte of the record is the graphic;
+		inc 	ra
+		ldn 	ra 											; zero means the sprite is not on screen
+		dec 	ra
+		dec 	ra
+		bz 		SC_Next
+
+		ldn 	ra 											; X position -> cell column
+		adi 	3 											; centre of the 5-wide sprite
+		shr
+		shr
+		shr
+		dec 	r2 											; hold the column on the stack
+		str 	r2
+		inc 	ra
+		ldn 	ra 											; Y position -> cell band
+		dec 	ra
+		adi 	2 											; centre of the 4-tall sprite
+		shr
+		shr
+		shl 												; band * 8
+		shl
+		shl
+		add 												; + column
+		inc 	r2
+		ani 	63 											; stay inside the 64 cells whatever happens
+		plo 	rd
+		ldn 	re 											; this sprite's colour
+		str 	rd
+SC_Next:
+		inc 	re
+		glo 	ra 											; on to the next 16-byte record
+		adi 	SpriteRecordSize
+		plo 	ra
+		xri 	SpriteStorageEnd
+		bnz 	SC_Sprite
 FC_Done:
 		sep 	r3
 
-;	Eight bands down the screen, symmetric about the middle, chosen to read well
-;	against the blue background: white at the top and bottom walls, yellow through
-;	the upper and lower maze, cyan across the tunnel band in the middle.
+;	Pacman yellow, the four ghosts distinct, the bonus white. The board itself is white, so colour means "something is here".
 
-ColourTable:
-		.db 	7,7,7,7,7,7,7,7 							; rows  0- 3   top wall and first corridor
-		.db 	5,5,5,5,5,5,5,5 							; rows  4- 7
-		.db 	5,5,5,5,5,5,5,5 							; rows  8-11
-		.db 	6,6,6,6,6,6,6,6 							; rows 12-15
-		.db 	6,6,6,6,6,6,6,6 							; rows 16-19   tunnel band
-		.db 	5,5,5,5,5,5,5,5 							; rows 20-23
-		.db 	5,5,5,5,5,5,5,5 							; rows 24-27
-		.db 	7,7,7,7,7,7,7,7 							; rows 28-31   bottom wall
+SpriteColours:
+		.db 	5 											; 0 Pacman   yellow
+		.db 	1 											; 1 ghost    red
+		.db 	3 											; 2 ghost    magenta
+		.db 	6 											; 3 ghost    cyan
+		.db 	4 											; 4 ghost    green
+		.db 	7 											; 5 bonus    white
 
 		.org 	$FF
 		.db 	0

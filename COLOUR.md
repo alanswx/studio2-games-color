@@ -89,13 +89,12 @@ how it was validated before anything was changed.
 
 Roughly in order of value per byte spent.
 
-### 3a. Per-cell tuning — free
+### 3a. Per-cell tuning — superseded
 
-The table is 64 *independent* cells; this version wastes that by using eight
-uniform bands. Hand-picking each cell to follow the maze's own structure — the
-ghost house, the tunnel mouths, the corner blocks — costs exactly the same 64
-bytes and no extra code. This is the cheapest visible win and should be done
-first.
+The first version used eight uniform colour bands and a 64-byte table. Both are
+gone: the board is now a single colour and the cells carry sprite positions
+instead, which is information rather than decoration. The 64 bytes the table used
+paid for `SpriteColour`.
 
 ### 3b. Per-level palettes — ~8 bytes a level
 
@@ -130,52 +129,64 @@ normal palette. And note the game *already* signalled this state in monochrome b
 swapping the ghost sprite to the hollow `GhostReverse` shape -- this makes it
 unmissable rather than adding information that was not there.
 
-### 3d. Sprite colour, the honest way — the big one, and the one that hurts
+### 3d. Per-sprite colour — **done, and the rewrite turned out not to be needed**
 
-Measured first, because the numbers decide it. A sprite is 5 pixels wide and 4
-rows tall; its top-left lands at pixel `x+1`, row `y+1`, with `x` pixel-granular
-and `y` row-granular. So against an 8-wide, 4-tall cell:
+This was expected to be the hard one. It is not, and the reason is worth writing
+down because the arithmetic argued the other way.
 
-- horizontally it fits one cell only when `(x+1) & 7 <= 3` — half the time
-- vertically it fits one band only when `(y+1) & 3 == 0` — a quarter of the time
+**What the arithmetic said.** A sprite is 5 pixels wide and 4 rows tall, its
+top-left at pixel `x+1`, row `y+1`, with `x` pixel-granular and `y` row-granular.
+Against an 8-wide, 4-tall cell it fits one cell horizontally only when
+`(x+1) & 7 <= 3` — half the time — and one band vertically only when
+`(y+1) & 3 == 0` — a quarter. So colouring every cell a sprite touches means 1
+cell 12.5% of the time, 2 cells 50%, 4 cells 37.5%: **2.6 cells on average, 84
+pixels of colour for a 20-pixel sprite, a 4.2x overspill.**
 
-Which gives 1 cell 12.5% of the time, 2 cells 50%, and 4 cells 37.5% —
-**2.6 cells on average, 84 pixels of colour to show a 20-pixel sprite, a 4.2x
-overspill.** Every wall and pellet inside that region takes the sprite's colour
-too.
+**What actually works.** Colour only the cell containing the sprite's *centre* —
+pixel `x+3`, row `y+2`. One cell, always: 32 pixels for a 20-pixel sprite, 1.6x.
+The sprite is then fully inside its own colour only 12.5% of the time, so most of
+the time a corner or edge of it shows in the board colour — visible as a fringe,
+and completely legible. Four ghosts in four colours plus a yellow Pacman read at a
+glance, which is the entire point.
 
-This is what makes it look like a colour game rather than a coloured maze.
-Because colour is per-block, a sprite can only be given its own colour by
-rewriting the block it currently occupies:
+It works better than the numbers suggest because a sprite in a corridor is nearly
+all of what is in that cell. The overspill lands on corridor and pellets, not on
+some unrelated part of the picture.
 
-- On draw, note the sprite's cell index, save the cell's current value, write the
-  sprite's colour.
-- On erase, restore the saved value.
+`SpriteColour` fills all 64 cells with the board colour and then walks the six
+sprite records, skipping any whose graphic byte is zero, and writes each one's
+colour into its centre cell. About 500 instructions a frame against a 1321
+instruction budget — and the Studio II build stays **frame-identical to the
+original** at 300/500/900/1300, so it costs no game speed at all.
 
-The game already has exactly the right hooks — `SpritePlot` and
-`SpriteLoadAndPlot` do XOR draw/erase, so both edges already exist. Cost is a few
-bytes of state per sprite (cell index + saved colour) and two stores per sprite
-per frame, which is nothing against a 1321-instruction frame.
+The board is now white rather than banded, so a coloured cell means *something is
+there*. That is information rather than decoration, which the bands were not.
 
-The catch is honest and unavoidable: **two sprites in one 8×4 block still share a
-colour**, and a sprite straddling a block boundary colours both. Pacman and a
-ghost meeting will clash. That is the hardware, not the implementation.
+### 3e. Realigning the maze to the grid — possible, and no longer worth it
 
-### 3e. Design the maze around the grid — the real fix
+This was going to be the "proper" fix: redraw the maze so corridors align to the
+8x4 cell grid, so a sprite travelling a corridor stays inside one colour. Having
+costed it, and having seen §3d work without it, it is not worth doing.
 
-The previous item fights the hardware; this one works with it. If the maze is
-redrawn so that corridors align to the 8×4 block grid, a sprite travelling along
-a corridor stays inside blocks of one colour, and the clash largely disappears.
-That means:
+**What it would take.** The maze is a 10x6 array of 6-wide, 5-tall squares. The
+cell grid is 8x8 of 8-wide, 4-tall. Aligning means an 8x8 maze of 8x4 squares —
+64 squares against the present 60, so the maze need not get simpler. The code
+changes are mostly *simplifications*: `X % 6 == 0` and `Y % 5 == 0` are currently
+precomputed into bits 4 and 5 of every map byte and tested with `ani $20` / `ani
+$10`, and the cell index is found by a repeated-subtraction divide
+(`ULM_Divide`). On an 8x4 grid those become `ani 7`, `ani 3`, and three shifts —
+smaller and faster than what is there. `map.dat` and `mapconvert.py` already
+generate the maze, so the data side is a rewrite of a spreadsheet, not of code.
 
-- corridors on 4-row boundaries vertically, 8-pixel boundaries horizontally
-- the ghost house occupying whole blocks
-- pellets placed so a block is never shared by two things that need to differ
+**Why it still would not be clean.** Alignment only holds while a sprite is *at
+rest*. Pacman moves a pixel at a time; the cell grid is 4 rows tall, so vertical
+motion that stays inside one band means moving in 4-row jumps — eight discrete
+vertical positions on the whole screen. Clean per-sprite colour therefore costs
+smooth movement, and turns Pacman into a board game. The trade is not worth it
+for an effect §3d already delivers.
 
-This is a game-design job rather than a coding one, and it is how a title
-*written* for the 1864 would have been laid out in the first place. Pacman's
-current maze is a 10×6 array of 6×5-pixel cells — deliberately not aligned to
-anything, because on a Studio II nothing needed aligning.
+So: **possible, well understood, and declined.** Anyone who wants it has the
+route above.
 
 ### 3f. Background stepping — needs a machine test
 
