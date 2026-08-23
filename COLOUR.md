@@ -105,14 +105,44 @@ cycling three palettes makes the game feel far less static. Call `ColourInit`
 from `NextLevel` instead of only at start-up, with the table pointer chosen from
 `Level`.
 
-### 3c. Power-pill flash — ~20 bytes
+### 3c. Power-pill flash — **done**
 
-When a power pill is eaten the game already tracks a "ghosts are edible" timer.
-Rewriting a handful of cells to blue-and-white on alternate frames during that
-window gives the arcade's flash. Very visible for very little code, and it needs
-no per-sprite machinery.
+This is the one piece of colour on this hardware that costs nothing in fidelity,
+because it is a *global* state: it needs no alignment between the 8x4 grid and
+anything the game draws. While `ChasingTimer` is non-zero the whole board flashes
+**white / magenta** on the same 8-frame cycle the beeper already uses.
 
-### 3d. Sprite colour, the honest way — the big one
+`FrameColour` on the `$A00` page now owns the per-frame chasing work -- the timer
+decrement and the alternate-frame beeper, which used to be inline -- and sets the
+palette from it. That swap paid for itself: the call is 7 bytes where the inline
+block was 16, so it *freed* 9 bytes in the `$C00-$DFF` page.
+
+Repainting is not done every frame. While chasing it happens only when the low
+three bits of the timer are zero, which is exactly when the flash bit flips, so it
+costs 64 stores every eighth frame rather than every frame; leaving the chase
+repaints once, guarded by a `ColourState` byte.
+
+Two things worth recording. **Do not flash to blue** -- the background is blue, so
+blue cells make lit and unlit pixels identical and the board vanishes. That was
+the first attempt, and 20 of 70 sampled frames came back completely blank. White
+and magenta are both legible against the background and neither appears in the
+normal palette. And note the game *already* signalled this state in monochrome by
+swapping the ghost sprite to the hollow `GhostReverse` shape -- this makes it
+unmissable rather than adding information that was not there.
+
+### 3d. Sprite colour, the honest way — the big one, and the one that hurts
+
+Measured first, because the numbers decide it. A sprite is 5 pixels wide and 4
+rows tall; its top-left lands at pixel `x+1`, row `y+1`, with `x` pixel-granular
+and `y` row-granular. So against an 8-wide, 4-tall cell:
+
+- horizontally it fits one cell only when `(x+1) & 7 <= 3` — half the time
+- vertically it fits one band only when `(y+1) & 3 == 0` — a quarter of the time
+
+Which gives 1 cell 12.5% of the time, 2 cells 50%, and 4 cells 37.5% —
+**2.6 cells on average, 84 pixels of colour to show a 20-pixel sprite, a 4.2x
+overspill.** Every wall and pellet inside that region takes the sprite's colour
+too.
 
 This is what makes it look like a colour game rather than a coloured maze.
 Because colour is per-block, a sprite can only be given its own colour by

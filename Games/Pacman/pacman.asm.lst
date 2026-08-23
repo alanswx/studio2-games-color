@@ -98,6 +98,7 @@
       = 0053            BonusFrameCounter = $53 									; tracks bonus frames.
       = 0054            Death = $54 												; set to non-zero when died (e.g. ghost collision)
       = 0055            Outstanding100Points = $55 									; the number of outstanding units of 100 points to be added to the score
+      = 0056            ColourState = $56 											; COLOUR: which palette is currently loaded (0 normal, 1 power-pill)
                         ;
                         ;	These are the six sprites : Player (0) Ghosts (1-4) Bonus (5) all of which are 16 bytes ong
                         ;
@@ -1677,87 +1678,81 @@
 0D9D  FC 01             		adi 	1
 0D9F  5A                		str 	ra
 
-0DA0  F8 52             		ldi 	ChasingTimer 								; decrement chasing timer if > 0
-0DA2  AA                		plo 	ra
-0DA3  0A                		ldn 	ra
-0DA4  32 B0             		bz 		ChasingZero
-0DA6  FF 01             		smi 	1
-0DA8  5A                		str 	ra
+0DA0  F8 0A             		ldi 	>FrameColour 								; COLOUR: this used to be the chasing-timer decrement and the
+0DA2  B4                		phi 	r4 											; alternate-frame beeper, inline. FrameColour does both, and then
+0DA3  F8 17             		ldi 	<FrameColour 								; sets the palette from the timer. Moved out because this page is
+0DA5  A4                		plo 	r4 											; full -- the call is 7 bytes where the original block was 16.
+0DA6  D4                		sep 	r4
 
-0DA9  FA 08             		ani 	8 											; check alternate frames
-0DAB  32 B0             		bz 		ChasingZero
-0DAD  F8 0B             		ldi 	11 											; play beeper alternate frames.
-0DAF  57                		str 	r7
+0DA7                    ChasingZero:
+0DA7  F8 53             		ldi 	BonusFrameCounter 							; point RA to Bonus Frame Counter
+0DA9  AA                		plo 	ra
 
-0DB0                    ChasingZero:
-0DB0  F8 53             		ldi 	BonusFrameCounter 							; point RA to Bonus Frame Counter
-0DB2  AA                		plo 	ra
+0DAA  0A                		ldn 	ra 											; and increment it.
+0DAB  FC 01             		adi 	1
+0DAD  5A                		str 	ra
 
-0DB3  0A                		ldn 	ra 											; and increment it.
-0DB4  FC 01             		adi 	1
-0DB6  5A                		str 	ra
+0DAE  F8 44             		ldi 	EatCounter 									; if eaten everything, go to next level.
+0DB0  AA                		plo 	ra
+0DB1  0A                		ldn 	ra
+0DB2  32 3D             		bz 		NextLevel
 
-0DB7  F8 44             		ldi 	EatCounter 									; if eaten everything, go to next level.
-0DB9  AA                		plo 	ra
-0DBA  0A                		ldn 	ra
-0DBB  32 3D             		bz 		NextLevel
+0DB4  F8 50             		ldi 	LostLife 									; read the 'lost life' flag.
+0DB6  AA                		plo 	ra
+0DB7  0A                		ldn 	ra
+0DB8  32 57             		bz		RestartSprites 								; and go round again if not dead.
 
-0DBD  F8 50             		ldi 	LostLife 									; read the 'lost life' flag.
+0DBA  F8 3C             		ldi 	60 											; long beep.
+0DBC  57                		str 	r7
+
+0DBD  F8 40             		ldi 	Lives 										; point RA to lives
 0DBF  AA                		plo 	ra
-0DC0  0A                		ldn 	ra
-0DC1  32 57             		bz		RestartSprites 								; and go round again if not dead.
+0DC0  0A                		ldn 	ra 											; decrement lives
+0DC1  FF 01             		smi 	1
+0DC3  5A                		str 	ra
+0DC4  3A 46             		bnz 	SameLevel 									; if lives left, then restart.
 
-0DC3  F8 3C             		ldi 	60 											; long beep.
-0DC5  57                		str 	r7
-
-0DC6  F8 40             		ldi 	Lives 										; point RA to lives
+0DC6  F8 46             		ldi 	Score 										; point RA to score
 0DC8  AA                		plo 	ra
-0DC9  0A                		ldn 	ra 											; decrement lives
-0DCA  FF 01             		smi 	1
-0DCC  5A                		str 	ra
-0DCD  3A 46             		bnz 	SameLevel 									; if lives left, then restart.
 
-0DCF  F8 46             		ldi 	Score 										; point RA to score
-0DD1  AA                		plo 	ra
+0DC9  F8 01             		ldi 	1 											; set score digit index to 1
+0DCB  AE                		plo 	re
 
-0DD2  F8 01             		ldi 	1 											; set score digit index to 1
-0DD4  AE                		plo 	re
+0DCC                    ScoreWriteLoop:
+0DCC  8E                		glo 	re 											; convert 3 LSBs of RE to screen address in RD
+0DCD  FA 07             		ani 	7
+0DCF  AD                		plo 	rd
+0DD0  F8 09             		ldi 	VideoPage 									; put in video page
+0DD2  BD                		phi 	rd
 
-0DD5                    ScoreWriteLoop:
-0DD5  8E                		glo 	re 											; convert 3 LSBs of RE to screen address in RD
-0DD6  FA 07             		ani 	7
-0DD8  AD                		plo 	rd
-0DD9  F8 09             		ldi 	VideoPage 									; put in video page
-0DDB  BD                		phi 	rd
+0DD3  4A                		lda 	ra 											; read next score digit
+0DD4  FC 10             		adi 	$10 										; score table offset in BIOS
+0DD6  AF                		plo 	rf
+0DD7  F8 02             		ldi 	$02 										; read from $210+n
+0DD9  BF                		phi 	rf
+0DDA  0F                		ldn 	rf 											; into D, the new offset
+0DDB  AF                		plo 	rf 											; put into R4, R4 now contains 5 rows graphic data
 
-0DDC  4A                		lda 	ra 											; read next score digit
-0DDD  FC 10             		adi 	$10 										; score table offset in BIOS
-0DDF  AF                		plo 	rf
-0DE0  F8 02             		ldi 	$02 										; read from $210+n
-0DE2  BF                		phi 	rf
-0DE3  0F                		ldn 	rf 											; into D, the new offset
-0DE4  AF                		plo 	rf 											; put into R4, R4 now contains 5 rows graphic data
-
-0DE5  F8 05             		ldi 	5 											; set R5.0 to 6
-0DE7  AC                		plo 	rc
-0DE8                    OutputChar:
-0DE8  4F                		lda 	rf 											; read character and advance
-0DE9  F6                		shr 												; centre in byte
-0DEA  F6                		shr
+0DDC  F8 05             		ldi 	5 											; set R5.0 to 6
+0DDE  AC                		plo 	rc
+0DDF                    OutputChar:
+0DDF  4F                		lda 	rf 											; read character and advance
+0DE0  F6                		shr 												; centre in byte
+0DE1  F6                		shr
+0DE2  5D                		str 	rd
+0DE3  8D                		glo 	rd
+0DE4  FC 08             		adi 	8
+0DE6  AD                		plo 	rd
+0DE7  2C                		dec 	rc 											; decrement counter
+0DE8  8C                		glo 	rc
+0DE9  3A DF             		bnz 	OutputChar 									; loop back if nonzero
 0DEB  5D                		str 	rd
-0DEC  8D                		glo 	rd
-0DED  FC 08             		adi 	8
-0DEF  AD                		plo 	rd
-0DF0  2C                		dec 	rc 											; decrement counter
-0DF1  8C                		glo 	rc
-0DF2  3A E8             		bnz 	OutputChar 									; loop back if nonzero
-0DF4  5D                		str 	rd
-0DF5  1E                		inc 	re 											; increment score index counter
-0DF6  8E                		glo 	re
-0DF7  FB 07             		xri 	7 											; reached seven, end of score write.
-0DF9  3A D5             		bnz 	ScoreWriteLoop
+0DEC  1E                		inc 	re 											; increment score index counter
+0DED  8E                		glo 	re
+0DEE  FB 07             		xri 	7 											; reached seven, end of score write.
+0DF0  3A CC             		bnz 	ScoreWriteLoop
 
-0DFB  30 FB             Dead:	br 		Dead
+0DF2  30 F2             Dead:	br 		Dead
 
                         ; ***************************************************************************************************************************************
                         ;
@@ -1793,7 +1788,7 @@
 0A05  AD                		plo 	rd
 0A06  F8 0A             		ldi 	>ColourTable 								; RE = the table
 0A08  BE                		phi 	re
-0A09  F8 17             		ldi 	<ColourTable
+0A09  F8 6E             		ldi 	<ColourTable
 0A0B  AE                		plo 	re
 0A0C                    CI_Loop:
 0A0C  4E                		lda 	re 											; next table byte, bump RE
@@ -1804,19 +1799,106 @@
 0A12  3A 0C             		bnz 	CI_Loop
 0A14  C0 0D25           		lbr 	StartGame 									; into the game proper
 
+                        ; ---------------------------------------------------------------------------------------------------------------------------------------
+                        ;	FrameColour - called once per frame from the main loop.
+                        ;
+                        ;	Does what the inline block it replaced did (decrement the chasing timer, beep on alternate frames) and then puts the power-pill
+                        ;	state on the screen. This is the one piece of colour on this hardware that costs nothing in fidelity: it is a *global* state, so it
+                        ;	needs no alignment between the 8x4 colour grid and anything the game draws.
+                        ;
+                        ;	While ghosts are edible the whole board flashes white/blue on an 8-frame cycle -- the same cycle the beeper already uses. The game
+                        ;	already swaps the ghost sprite to the hollow GhostReverse shape, which is the only cue a Studio II gets; this makes it unmissable.
+                        ;
+                        ;	Repainting is not done every frame. While chasing it happens only when the low three bits of the timer are zero, which is exactly
+                        ;	when the flash bit flips, so it costs 64 stores every eighth frame rather than every frame. Coming out of the chase it happens once,
+                        ;	guarded by ColourState.
+                        ; ---------------------------------------------------------------------------------------------------------------------------------------
+
+0A17                    FrameColour:
+0A17  F8 52             		ldi 	ChasingTimer 								; RA -> chasing timer (RA.1 is already the RAM page)
+0A19  AA                		plo 	ra
+0A1A  0A                		ldn 	ra
+0A1B  32 50             		bz 		FC_NotChasing 								; not chasing: make sure the normal palette is loaded
+0A1D  FF 01             		smi 	1 											; decrement it
+0A1F  5A                		str 	ra
+0A20  32 50             		bz 		FC_NotChasing 								; just expired this frame -- restore normally, do not flash
+
+0A22  FA 08             		ani 	8 											; beeper on alternate frames, as before
+0A24  32 29             		bz 		FC_NoBeep
+0A26  F8 0B             		ldi 	11
+0A28  57                		str 	r7
+0A29                    FC_NoBeep:
+0A29  0A                		ldn 	ra 											; repaint only when the flash bit is about to flip
+0A2A  FA 07             		ani 	7
+0A2C  3A 6D             		bnz 	FC_Done
+0A2E  0A                		ldn 	ra 											; which half of the flash?
+0A2F  FA 08             		ani 	8
+0A31  32 37             		bz 		FC_FlashB
+0A33  F8 07             		ldi 	7 											; white
+0A35  30 39             		br 		FC_Fill
+0A37                    FC_FlashB:
+0A37  F8 03             		ldi 	3 											; magenta. NOT blue: the background is blue, so blue cells would make
+                        															; lit and unlit pixels identical and the board would vanish for half
+                        															; the flash. Measured -- 20 of 70 sampled frames came back completely
+                        															; blank before this was changed. White and magenta are both legible
+                        															; against the background, and neither is in the normal palette.
+0A39                    FC_Fill:
+0A39  AC                		plo 	rc 											; hold the colour
+0A3A  F8 0B             		ldi 	$0B
+0A3C  BD                		phi 	rd
+0A3D  F8 00             		ldi 	0
+0A3F  AD                		plo 	rd
+0A40                    FC_FillLoop:
+0A40  8C                		glo 	rc 											; every cell the same -- the whole board changes at once
+0A41  5D                		str 	rd
+0A42  1D                		inc 	rd
+0A43  8D                		glo 	rd
+0A44  FB 40             		xri 	64
+0A46  3A 40             		bnz 	FC_FillLoop
+0A48  F8 56             		ldi 	ColourState 								; remember that the power-pill palette is loaded
+0A4A  AA                		plo 	ra
+0A4B  F8 01             		ldi 	1
+0A4D  5A                		str 	ra
+0A4E  30 6D             		br 		FC_Done
+
+0A50                    FC_NotChasing:
+0A50  F8 56             		ldi 	ColourState 								; already back to normal? then nothing to do
+0A52  AA                		plo 	ra
+0A53  0A                		ldn 	ra
+0A54  32 6D             		bz 		FC_Done
+0A56  F8 00             		ldi 	0
+0A58  5A                		str 	ra
+0A59  F8 0B             		ldi 	$0B 										; reload the normal band table
+0A5B  BD                		phi 	rd
+0A5C  F8 00             		ldi 	0
+0A5E  AD                		plo 	rd
+0A5F  F8 0A             		ldi 	>ColourTable
+0A61  BE                		phi 	re
+0A62  F8 6E             		ldi 	<ColourTable
+0A64  AE                		plo 	re
+0A65                    FC_RestoreLoop:
+0A65  4E                		lda 	re
+0A66  5D                		str 	rd
+0A67  1D                		inc 	rd
+0A68  8D                		glo 	rd
+0A69  FB 40             		xri 	64
+0A6B  3A 65             		bnz 	FC_RestoreLoop
+0A6D                    FC_Done:
+0A6D  D3                		sep 	r3
+
                         ;	Eight bands down the screen, symmetric about the middle, chosen to read well
                         ;	against the blue background: white at the top and bottom walls, yellow through
                         ;	the upper and lower maze, cyan across the tunnel band in the middle.
 
-0A17                    ColourTable:
-0A17  07070707 07070707 		.db 	7,7,7,7,7,7,7,7 							; rows  0- 3   top wall and first corridor
-0A1F  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows  4- 7
-0A27  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows  8-11
-0A2F  06060606 06060606 		.db 	6,6,6,6,6,6,6,6 							; rows 12-15
-0A37  06060606 06060606 		.db 	6,6,6,6,6,6,6,6 							; rows 16-19   tunnel band
-0A3F  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows 20-23
-0A47  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows 24-27
-0A4F  07070707 07070707 		.db 	7,7,7,7,7,7,7,7 							; rows 28-31   bottom wall
+0A6E                    ColourTable:
+0A6E  07070707 07070707 		.db 	7,7,7,7,7,7,7,7 							; rows  0- 3   top wall and first corridor
+0A76  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows  4- 7
+0A7E  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows  8-11
+0A86  06060606 06060606 		.db 	6,6,6,6,6,6,6,6 							; rows 12-15
+0A8E  06060606 06060606 		.db 	6,6,6,6,6,6,6,6 							; rows 16-19   tunnel band
+0A96  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows 20-23
+0A9E  05050505 05050505 		.db 	5,5,5,5,5,5,5,5 							; rows 24-27
+0AA6  07070707 07070707 		.db 	7,7,7,7,7,7,7,7 							; rows 28-31   bottom wall
 
 00FF                    		.org 	$FF
 00FF  00                		.db 	0
@@ -1827,12 +1909,15 @@ ADDSCORE           0C18    ASC_EXIT           0C2C    ASC_LOOP           0C1E
 BCS_EXIT           0C6B    BGS_BLANK          0C51    BLANK              046C
 BONUSFRAMECOUNTER  0053 E  BONUSINITIALISEDATA                           0C10
 BONUSRATE          00C0 E  BONUS_COLLIDEPLAYER                           0C54
-BONUS_GETSPRITE    0C44    CHASINGTIMER       0052 E  CHASINGZERO        0DB0
+BONUS_GETSPRITE    0C44    CHASINGTIMER       0052 E  CHASINGZERO        0DA7
 CHECKPLAYEREAT     07A0    CHERRY             0468    CI_LOOP            0A0C
-COLOURINIT         0A00    COLOURTABLE        0A17    CPE_ADDTENSTOSCORE 07D4
-CPE_EXIT           07F4    CPE_ISPELLET       07F3    DEAD               0DFB
-DEATH              0054 E  EATCOUNTER         0044 E  FIXUPOUTSTANDING   0C2D
-FRAME              004C E  FRAMESPERCHASINGTIMER                         0080 E
+COLOURINIT         0A00    COLOURSTATE        0056 E  COLOURTABLE        0A6E
+CPE_ADDTENSTOSCORE 07D4    CPE_EXIT           07F4    CPE_ISPELLET       07F3
+DEAD               0DF2    DEATH              0054 E  EATCOUNTER         0044 E
+FC_DONE            0A6D    FC_FILL            0A39    FC_FILLLOOP        0A40
+FC_FLASHB          0A37    FC_NOBEEP          0A29    FC_NOTCHASING      0A50
+FC_RESTORELOOP     0A65    FIXUPOUTSTANDING   0C2D    FRAME              004C E
+FRAMECOLOUR        0A17    FRAMESPERCHASINGTIMER                         0080 E
 FXO_EXIT           0C43    GCP_EATENGHOST     0D0C    GGM1               0CF7
 GGM_CHECKINVERT    0CE1    GGM_EXIT           0CFC    GGM_HORIZONTAL     0CCF
 GGM_HORIZONTAL1    0CDD    GGM_NOTCHASING     0CEC    GGM_NOTINPEN       0CAA
@@ -1855,7 +1940,7 @@ LEVELDATAEND       043E    LIVES              0040 E  LOSTLIFE           0050 E
 MAZEDATA           0000 E  MOVESPRITE         067F    MSP_MOVEOKAY       06A6
 MSP_NOSIGN1        06C4    MSP_NOSIGN2        06CE    MSP_NOTFIRST       06E0
 NEXTLEVEL          0D3D    NOCMETHOD          07F7    NODELAY            0D90
-NOMMETHOD          07F8    NOSMETHOD          07F5    OUTPUTCHAR         0DE8
+NOMMETHOD          07F8    NOSMETHOD          07F5    OUTPUTCHAR         0DDF
 OUTSTANDING100POINTS                          0055 E  PACMANCLOSED       0448
 PACMANDOWN         0450    PACMANLEFT         0454    PACMANRIGHT        0458
 PACMANUP           044C    PELLET             0440    
@@ -1871,7 +1956,7 @@ RA                 000A E  RAMPAGE            0008 E  RANDOM             04E3
 RANDOMSEED         0042 E  RB                 000B E  RC                 000C E
 RD                 000D E  RE                 000E E  RESTARTSPRITES     0D57
 RF                 000F E  RN_NOXOR           04F6    SAMELEVEL          0D46
-SCANKEYPAD         04C4    SCORE              0046 E  SCOREWRITELOOP     0DD5
+SCANKEYPAD         04C4    SCORE              0046 E  SCOREWRITELOOP     0DCC
 SHIFTXORDRAWERBASE 0474    SKBLOOP            04CB    SKBSKIP            04D9
 SLOW               0D88    SLOW2              0D85    SPRITECOUNT        0006 E
 SPRITELOADANDPLOT  04FF    SPRITEPLOT         0506    SPRITERECORDSIZE   0010 E

@@ -98,6 +98,7 @@ ChasingTimer = $52 											; decrements to zero - if non-zero ghosts are unde
 BonusFrameCounter = $53 									; tracks bonus frames.
 Death = $54 												; set to non-zero when died (e.g. ghost collision)
 Outstanding100Points = $55 									; the number of outstanding units of 100 points to be added to the score
+ColourState = $56 											; COLOUR: which palette is currently loaded (0 normal, 1 power-pill)
 ;
 ;	These are the six sprites : Player (0) Ghosts (1-4) Bonus (5) all of which are 16 bytes ong
 ;
@@ -1648,17 +1649,11 @@ NoDelay:
 		adi 	1
 		str 	ra
 
-		ldi 	ChasingTimer 								; decrement chasing timer if > 0
-		plo 	ra
-		ldn 	ra
-		bz 		ChasingZero
-		smi 	1
-		str 	ra
-
-		ani 	8 											; check alternate frames
-		bz 		ChasingZero
-		ldi 	11 											; play beeper alternate frames.
-		str 	r7
+		ldi 	>FrameColour 								; COLOUR: this used to be the chasing-timer decrement and the
+		phi 	r4 											; alternate-frame beeper, inline. FrameColour does both, and then
+		ldi 	<FrameColour 								; sets the palette from the timer. Moved out because this page is
+		plo 	r4 											; full -- the call is 7 bytes where the original block was 16.
+		sep 	r4
 
 ChasingZero:
 		ldi 	BonusFrameCounter 							; point RA to Bonus Frame Counter
@@ -1774,6 +1769,93 @@ CI_Loop:
 		xri 	64
 		bnz 	CI_Loop
 		lbr 	StartGame 									; into the game proper
+
+; ---------------------------------------------------------------------------------------------------------------------------------------
+;	FrameColour - called once per frame from the main loop.
+;
+;	Does what the inline block it replaced did (decrement the chasing timer, beep on alternate frames) and then puts the power-pill
+;	state on the screen. This is the one piece of colour on this hardware that costs nothing in fidelity: it is a *global* state, so it
+;	needs no alignment between the 8x4 colour grid and anything the game draws.
+;
+;	While ghosts are edible the whole board flashes white/blue on an 8-frame cycle -- the same cycle the beeper already uses. The game
+;	already swaps the ghost sprite to the hollow GhostReverse shape, which is the only cue a Studio II gets; this makes it unmissable.
+;
+;	Repainting is not done every frame. While chasing it happens only when the low three bits of the timer are zero, which is exactly
+;	when the flash bit flips, so it costs 64 stores every eighth frame rather than every frame. Coming out of the chase it happens once,
+;	guarded by ColourState.
+; ---------------------------------------------------------------------------------------------------------------------------------------
+
+FrameColour:
+		ldi 	ChasingTimer 								; RA -> chasing timer (RA.1 is already the RAM page)
+		plo 	ra
+		ldn 	ra
+		bz 		FC_NotChasing 								; not chasing: make sure the normal palette is loaded
+		smi 	1 											; decrement it
+		str 	ra
+		bz 		FC_NotChasing 								; just expired this frame -- restore normally, do not flash
+
+		ani 	8 											; beeper on alternate frames, as before
+		bz 		FC_NoBeep
+		ldi 	11
+		str 	r7
+FC_NoBeep:
+		ldn 	ra 											; repaint only when the flash bit is about to flip
+		ani 	7
+		bnz 	FC_Done
+		ldn 	ra 											; which half of the flash?
+		ani 	8
+		bz 		FC_FlashB
+		ldi 	7 											; white
+		br 		FC_Fill
+FC_FlashB:
+		ldi 	3 											; magenta. NOT blue: the background is blue, so blue cells would make
+															; lit and unlit pixels identical and the board would vanish for half
+															; the flash. Measured -- 20 of 70 sampled frames came back completely
+															; blank before this was changed. White and magenta are both legible
+															; against the background, and neither is in the normal palette.
+FC_Fill:
+		plo 	rc 											; hold the colour
+		ldi 	$0B
+		phi 	rd
+		ldi 	0
+		plo 	rd
+FC_FillLoop:
+		glo 	rc 											; every cell the same -- the whole board changes at once
+		str 	rd
+		inc 	rd
+		glo 	rd
+		xri 	64
+		bnz 	FC_FillLoop
+		ldi 	ColourState 								; remember that the power-pill palette is loaded
+		plo 	ra
+		ldi 	1
+		str 	ra
+		br 		FC_Done
+
+FC_NotChasing:
+		ldi 	ColourState 								; already back to normal? then nothing to do
+		plo 	ra
+		ldn 	ra
+		bz 		FC_Done
+		ldi 	0
+		str 	ra
+		ldi 	$0B 										; reload the normal band table
+		phi 	rd
+		ldi 	0
+		plo 	rd
+		ldi 	>ColourTable
+		phi 	re
+		ldi 	<ColourTable
+		plo 	re
+FC_RestoreLoop:
+		lda 	re
+		str 	rd
+		inc 	rd
+		glo 	rd
+		xri 	64
+		bnz 	FC_RestoreLoop
+FC_Done:
+		sep 	r3
 
 ;	Eight bands down the screen, symmetric about the middle, chosen to read well
 ;	against the blue background: white at the top and bottom walls, yellow through
