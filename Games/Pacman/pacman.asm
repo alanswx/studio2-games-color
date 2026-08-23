@@ -117,7 +117,10 @@ SpriteStorageEnd = SpriteStorage + (SpriteRecordSize*SpriteCount)
     	.include "1802.inc"
     	.org    400h										; ROM code in S2 starts at $400.
 StartCode:
-    	.db     >(StartGame),<(StartGame)					; This is required for the Studio 2, which runs from StartGame with P = 3
+    	.db     >(ColourInit),<(ColourInit)					; This is required for the Studio 2, which runs from StartGame with P = 3
+    														; COLOUR: entry now goes to ColourInit ($A00), which sets up the
+    														; CDP1864 colour RAM and then long-branches to StartGame. Done this
+    														; way because $400-$7FF has 4 bytes free and $C00-$DFF has 2.
 
 ; ***************************************************************************************************************************************
 ;
@@ -1726,6 +1729,65 @@ OutputChar:
 		bnz 	ScoreWriteLoop
 
 Dead:	br 		Dead
+
+; ***************************************************************************************************************************************
+;
+;												CDP1864 / Studio III colour support
+;
+;	The Studio III (and the MPT-02/Victory family) put 64 colour cells behind a one-page window at $B00. Each cell covers
+;	8 pixels across by 4 display rows down, so the 64x32 screen is divided into an 8x8 grid of colour blocks. The cell for a
+;	given screen byte is indexed {row[4:2], byte_column}, which is simply (row/4)*8 + column -- so the table below is in
+;	natural reading order, eight entries per band, top band first.
+;
+;	Three bits per cell, and NOT in {R,G,B} order -- it is the 1864's pin order:
+;
+;		bit 0 = RED     bit 1 = BLUE     bit 2 = GREEN
+;
+;		0 black   1 red   2 blue   3 magenta   4 green   5 yellow   6 cyan   7 white
+;
+;	A lit pixel takes its cell's colour; an unlit one takes the global background, which powers up blue and is stepped by
+;	OUT 1. We deliberately do NOT issue OUT 1: on a Studio II that same port turns the display off, and leaving it alone is
+;	what keeps this one binary working on both machines. It is also what RCA themselves did -- their dual-machine cartridges
+;	(pinball and the rest) leave the background at its default blue.
+;
+;	On a Studio II the whole of $B00 is undecoded (A9 is high, so it is neither RAM nor, unless a cartridge pages it, ROM),
+;	so every store below goes nowhere and the game runs exactly as it always did.
+;
+; ***************************************************************************************************************************************
+
+		.org 	$A00 										; a spare cartridge page: $400-$7FF and $C00-$DFF are both full
+
+ColourInit:
+		ldi 	$0B 										; RD = $B00, the colour RAM window
+		phi 	rd
+		ldi 	0
+		plo 	rd
+		ldi 	>ColourTable 								; RE = the table
+		phi 	re
+		ldi 	<ColourTable
+		plo 	re
+CI_Loop:
+		lda 	re 											; next table byte, bump RE
+		str 	rd 											; write the colour cell
+		inc 	rd
+		glo 	rd 											; done all 64?
+		xri 	64
+		bnz 	CI_Loop
+		lbr 	StartGame 									; into the game proper
+
+;	Eight bands down the screen, symmetric about the middle, chosen to read well
+;	against the blue background: white at the top and bottom walls, yellow through
+;	the upper and lower maze, cyan across the tunnel band in the middle.
+
+ColourTable:
+		.db 	7,7,7,7,7,7,7,7 							; rows  0- 3   top wall and first corridor
+		.db 	5,5,5,5,5,5,5,5 							; rows  4- 7
+		.db 	5,5,5,5,5,5,5,5 							; rows  8-11
+		.db 	6,6,6,6,6,6,6,6 							; rows 12-15
+		.db 	6,6,6,6,6,6,6,6 							; rows 16-19   tunnel band
+		.db 	5,5,5,5,5,5,5,5 							; rows 20-23
+		.db 	5,5,5,5,5,5,5,5 							; rows 24-27
+		.db 	7,7,7,7,7,7,7,7 							; rows 28-31   bottom wall
 
 		.org 	$FF
 		.db 	0
