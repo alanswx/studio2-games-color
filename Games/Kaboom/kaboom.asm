@@ -82,7 +82,8 @@ BombMovesPerFrame = 4 										; no of attempted bomb moves per frame.
     	.include "1802.inc"
     	.org    400h										; ROM code in S2 starts at $400.
 StartCode:
-    	.db     >(StartGame),<(StartGame)					; This is required for the Studio 2, which runs from StartGame with P = 3
+    	.db     >(ColourInit),<(ColourInit)					; This is required for the Studio 2, which runs from StartGame with P = 3
+															; COLOUR: entry now goes via the colour page at $A00
 
 ; ***************************************************************************************************************************************
 ;
@@ -1012,6 +1013,59 @@ OutputChar:
 
 Stop:													; game ends, press RESET to play again.
 		br 		Stop
+
+; ***************************************************************************************************************************************
+;
+;										CDP1864 colour for the Studio III / MPT-02 family
+;
+;	64 colour cells behind a one-page window at $B00, each 8 pixels across by 4 rows down, so the screen is an 8x8 grid of blocks and
+;	the table below is in reading order. Three bits per cell in the 1864's pin order, which is NOT {R,G,B}:
+;
+;		bit 0 = RED     bit 1 = BLUE     bit 2 = GREEN
+;		0 black   1 red   2 blue   3 magenta   4 green   5 yellow   6 cyan   7 white
+;
+;	Everywhere else, an object crossing a band boundary and changing colour is the flaw in this hardware. In Kaboom it is the point.
+;	A bomb is released at the top and falls the whole height of the screen, so the bands turn into a time-to-impact gauge: red while
+;	it is new, magenta and yellow on the way down, cyan when it is nearly on you, and green once it is in among the buckets. The
+;	player reads how long is left from the colour without being told, and it costs 64 bytes.
+;
+;	The buckets straddle rows 24-31, which is bands 6 and 7, so both of those are green -- splitting them would cut the buckets in
+;	half horizontally for no reason.
+;
+;	No OUT 1: it steps the 1864 background, but the same port blanks a Studio II, and leaving it alone is what lets one binary run
+;	on both. On a Studio II $B00 is undecoded and every store below goes nowhere.
+;
+; ***************************************************************************************************************************************
+
+		.org 	$A00 										; a spare cartridge page: the game itself is $400-$7FF
+
+ColourInit:
+		ldi 	$0B 										; RD -> the colour window
+		phi 	rd
+		ldi 	0
+		plo 	rd
+		ldi 	>BandTable 									; RE -> the cells to lay down
+		phi 	re
+		ldi 	<BandTable
+		plo 	re
+CI_Loop:
+		lda 	re
+		str 	rd
+		inc 	rd
+		glo 	rd
+		xri 	64
+		bnz 	CI_Loop
+		lbr 	StartGame
+
+BandTable:
+		.db 	1,1,1,1,1,1,1,1 							; band 0  rows 0-3   just released         red
+		.db 	1,1,1,1,1,1,1,1 							; band 1  rows 4-7   still high            red
+		.db 	3,3,3,3,3,3,3,3 							; band 2  rows 8-11  falling               magenta
+		.db 	3,3,3,3,3,3,3,3 							; band 3  rows 12-15 falling               magenta
+		.db 	5,5,5,5,5,5,5,5 							; band 4  rows 16-19 closing               yellow
+		.db 	6,6,6,6,6,6,6,6 							; band 5  rows 20-23 imminent              cyan
+		.db 	4,4,4,4,4,4,4,4 							; band 6  rows 24-27 in among the buckets  green
+		.db 	4,4,4,4,4,4,4,4 							; band 7  rows 28-31 the buckets           green
 
         .org    07FFh                   				; fill it to 1,024 bytes.
         .db     0FFh

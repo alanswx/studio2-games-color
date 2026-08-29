@@ -49,7 +49,7 @@ ISDownRight = 3
    
         .include "1802.inc"
         .org    400h                    ; where RCA Studio II games start
-        .db     >(Start),<(Start)  ; Internal Code call to Machine Code
+        .db     >(ColourInit),<(ColourInit)  ; Internal Code call to Machine Code (COLOUR: via the colour page)
 
 ; ****************************************************************************
 ;                               Invader Graphics
@@ -928,4 +928,76 @@ _WaitK0:bn3     _WaitK0                 ; wait for key 0
 
         .org    $07F8                   ; this is a bitmask table
         .db     $80,$40,$20,$10,$08,$04,$02,$01
+
+; ****************************************************************************
+; ****************************************************************************
+;
+;                    CDP1864 colour for the Studio III / MPT-02
+;
+;       The CDP1864 puts 64 colour cells behind a one-page window at $B00.
+;       Each covers 8 pixels across by 4 rows down, so the 64x32 screen is an
+;       8x8 grid of blocks and the table below is in reading order: eight
+;       entries per band, top band first. Three bits per cell, in the 1864's
+;       pin order, which is NOT {R,G,B}:
+;
+;               bit 0 = RED     bit 1 = BLUE    bit 2 = GREEN
+;
+;               0 black  1 red  2 blue  3 magenta  4 green  5 yellow
+;               6 cyan   7 white
+;
+;       Space Invaders is the game this hardware was waiting for. Everything on
+;       screen is locked to a row band: the invader block sits in bands 0-2, the
+;       middle three bands are open sky that only missiles cross, the shields
+;       are in band 6 and the base never leaves band 7. Nothing wanders, so
+;       nothing takes the wrong colour -- which is the failure mode that shapes
+;       the whole Pacman colour build (see COLOUR.md).
+;
+;       This is also what the arcade cabinet did. That machine was monochrome
+;       too and got its colour from a strip of cellophane glued to the tube, in
+;       bands, for exactly this reason. Here the bands are in the silicon.
+;
+;       The invader block descends, so invaders change colour as they come down
+;       -- red at the top where they are worth most, then yellow, then loose in
+;       the white sky. On the arcade overlay that was a side effect and it read
+;       as escalation. Keep it. To make colour follow the rows instead, call
+;       ColourInit again from the descent code; it is the same loop.
+;
+;       We deliberately do NOT issue OUT 1. It steps the 1864's background, but
+;       on a Studio II the same port turns the display off, so leaving it alone
+;       is what keeps one binary working on both machines. On a Studio II the
+;       whole of $B00 is undecoded and every store below goes nowhere.
+;
+; ****************************************************************************
+; ****************************************************************************
+
+        .org    $A00                    ; a spare cartridge page: the game is $400-$7FF
+
+ColourInit:
+        ldi     $0B                     ; RD -> the colour window at $B00
+        phi     rd
+        ldi     0
+        plo     rd
+        ldi     >BandTable              ; RE -> the 64 cells to lay down
+        phi     re
+        ldi     <BandTable
+        plo     re
+_ColourLoop:
+        lda     re
+        str     rd
+        inc     rd
+        glo     rd
+        xri     64                      ; 64 cells, then into the game
+        bnz     _ColourLoop
+        lbr     Start                   ; runs once, before the display matters
+
+BandTable:
+        .db     1,1,1,1,1,1,1,1         ; band 0  rows 0-3   top invader rows      red
+        .db     1,1,1,1,1,1,1,1         ; band 1  rows 4-7   invader rows          red
+        .db     5,5,5,5,5,5,5,5         ; band 2  rows 8-11  lowest invader rows   yellow
+        .db     7,7,7,7,7,7,7,7         ; band 3  rows 12-15 open sky              white
+        .db     7,7,7,7,7,7,7,7         ; band 4  rows 16-19 open sky, missiles    white
+        .db     7,7,7,7,7,7,7,7         ; band 5  rows 20-23 open sky, missiles    white
+        .db     4,4,4,4,4,4,4,4         ; band 6  rows 24-27 the shields           green
+        .db     6,6,6,6,6,6,6,6         ; band 7  rows 28-31 shield feet, the base cyan
+
         .end

@@ -76,7 +76,8 @@ BulletObject = ObjectStart 									; first is the bullet object.
     	.include "1802.inc"
     	.org    400h										; ROM code in S2 starts at $400.
 StartCode:
-    	.db     >(StartGame),<(StartGame)					; This is required for the Studio 2, which runs from StartGame with P = 3
+    	.db     >(ColourInit),<(ColourInit)					; This is required for the Studio 2, which runs from StartGame with P = 3
+															; COLOUR: entry now goes via the colour page at $A00
 
 ; ***************************************************************************************************************************************
 ;
@@ -1534,3 +1535,57 @@ SG_Not4:xri 	4 											; now we have 1,2,3 for easy,medium,hard
     	ldi 	>GoStart
     	phi 	r4
     	sep 	r4
+
+; ***************************************************************************************************************************************
+;
+;										CDP1864 colour for the Studio III / MPT-02 family
+;
+;	64 colour cells behind a one-page window at $B00, each 8 pixels across by 4 rows down: an 8x8 grid of blocks, table in reading
+;	order. Three bits per cell in the 1864's pin order, which is NOT {R,G,B}:
+;
+;		bit 0 = RED     bit 1 = BLUE     bit 2 = GREEN
+;		0 black   1 red   2 blue   3 magenta   4 green   5 yellow   6 cyan   7 white
+;
+;	Sky over ground is what horizontal bands are for, and it is what the arcade cabinet did. Reading the running screen: the top
+;	border and score sit in band 0, the ship flies through bands 1-4, rockets climb out of band 5, and the terrain, the bottom
+;	border and the fuel gauge fill bands 6-7.
+;
+;	So: white for the status line, cyan for sky, yellow where the rockets are, green for everything at ground level. The ship takes
+;	the colour of the altitude it is flying at, which is not a compromise here but the point -- cyan means safe, yellow means you
+;	are down among the rockets, green means you are in the terrain.
+;
+;	Do NOT use blue or black for a band. The 1864's background powers up blue and we never issue OUT 1 to step it (that port blanks
+;	a Studio II, and leaving it alone is what lets one binary run on both), so a blue cell makes lit and unlit pixels identical and
+;	that part of the screen disappears. On a Studio II $B00 is undecoded and every store below goes nowhere.
+;
+; ***************************************************************************************************************************************
+
+		.org 	$A00 										; a spare cartridge page: the game is $400-$7FF and $C00-$DFF
+
+ColourInit:
+		ldi 	$0B 										; RD -> the colour window
+		phi 	rd
+		ldi 	0
+		plo 	rd
+		ldi 	>BandTable 									; RE -> the cells to lay down
+		phi 	re
+		ldi 	<BandTable
+		plo 	re
+CI_Loop:
+		lda 	re
+		str 	rd
+		inc 	rd
+		glo 	rd
+		xri 	64
+		bnz 	CI_Loop
+		lbr 	StartGame
+
+BandTable:
+		.db 	7,7,7,7,7,7,7,7 							; band 0  rows 0-3   top border, score      white
+		.db 	6,6,6,6,6,6,6,6 							; band 1  rows 4-7   high sky               cyan
+		.db 	6,6,6,6,6,6,6,6 							; band 2  rows 8-11  sky                    cyan
+		.db 	6,6,6,6,6,6,6,6 							; band 3  rows 12-15 sky, the ship          cyan
+		.db 	6,6,6,6,6,6,6,6 							; band 4  rows 16-19 low sky, the ship      cyan
+		.db 	5,5,5,5,5,5,5,5 							; band 5  rows 20-23 rockets climbing       yellow
+		.db 	4,4,4,4,4,4,4,4 							; band 6  rows 24-27 terrain tops, fuel     green
+		.db 	4,4,4,4,4,4,4,4 							; band 7  rows 28-31 terrain, border, gauge green
