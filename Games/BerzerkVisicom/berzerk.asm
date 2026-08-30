@@ -210,7 +210,9 @@ DRM_ClearDone:
 		phi 	rf
 		ldi 	10*8+1 										; row 8, byte 1
 		plo 	rf
-		ldi 	$10 										; set RE.1 to point to the current bit mask for Oring in.
+		ldi 	$08 										; set RE.1 to the current bit mask for Oring in. NOT a page --
+														; this value is OR'd straight into the screen at DRM_Loop1, so
+														; relocating it moves every wall corner one pixel across.
 		phi 	re
 		ldi 	$0F 										; set RE.0 to the current byte #1 for Oring in.		
 		plo 	re
@@ -1117,13 +1119,9 @@ Graphics_Robot:
 ;
 ; ***************************************************************************************************************************************
 
-WriteDisplayByte:
-		str 	re 											; save result 
-		glo 	re 											; down one row
-		adi 	8
-		plo 	re
-		sep 	r3
-		br 		WriteDisplayByte
+WriteDisplayByte:                                           ; COLOUR: on the $E00 page, so it can
+		lbr 	WriteDisplayByteBoth 						; clear plane 1 too. Eight bytes either
+		.db 	0,0,0,0,0 									; way, so nothing below here moves.
 
 ; ***************************************************************************************************************************************
 ;
@@ -1671,6 +1669,25 @@ CRBT_Exit:
 ; ***************************************************************************************************************************************
 
 		.org 	$E00
+
+; The game-over score is written over whatever is still on screen -- an overwrite, not an XOR
+; -- so plane 1 has to be cleared underneath it, or a robot that happened to be standing where
+; a digit goes leaves its red behind as a yellow smudge.
+WriteDisplayByteBoth:
+		str 	re 											; save result
+		ghi 	re 											; $11 -> $13
+		adi 	2
+		phi 	re
+		ldi 	0
+		str 	re 											; clear plane 1 at the same spot
+		ghi 	re
+		smi 	2
+		phi 	re
+		glo 	re 											; down one row
+		adi 	8
+		plo 	re
+		sep 	r3
+		lbr 	WriteDisplayByte
 
 PartialXORPlot:
 		br 		PX_Shift0 									; shift right x 0

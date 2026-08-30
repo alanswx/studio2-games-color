@@ -77,15 +77,10 @@ DrawDigit:
         ldn     r6                      ; read the digit address
         plo     r6                      ; R6 now points to the digit
         ldi     5                       ; do 5 lines
-_DDLoop:phi     rb
-        lda     r6                      ; read byte from data
-        str     re                      ; write it out
-        glo     re                      ; next line down
-        adi     8
-        plo     re
-        ghi     rb                      ; decrement rb
-        smi     1
-        bnz     _DDLoop
+        lbr     DrawDigitBoth           ; COLOUR: the loop is on the $C00 page, where it
+        .db     0,0,0,0,0,0,0,0,0       ; can clear plane 1 as well. Twelve bytes either
+                                        ; way, so nothing below here moves.
+_DDDone:
         sep     r3                      ; return
         br     DrawDigit                ; reenter
 
@@ -873,6 +868,30 @@ KillMissile:                            ; the tail of the missile-expiry path,
         ldi     0                       ; lifted off the full $900 page
         str     ra
         lbr     MainLoop
+
+; The score digits are written over the top of whatever was there -- an overwrite, not an
+; XOR -- so plane 1 has to be cleared underneath them. Miss this and a tank that happened to
+; be sitting where the score goes leaves its red behind as a yellow impression, because the
+; digit clears plane 0 and nothing clears plane 1 until the next round starts.
+DrawDigitBoth:
+        phi     rb
+        lda     r6                      ; read byte from data
+        str     re                      ; write it out
+        ghi     re                      ; $11 -> $13
+        adi     2
+        phi     re
+        ldi     0
+        str     re                      ; clear plane 1 at the same spot
+        ghi     re
+        smi     2
+        phi     re
+        glo     re                      ; next line down
+        adi     8
+        plo     re
+        ghi     rb                      ; decrement rb
+        smi     1
+        bnz     DrawDigitBoth
+        lbr     _DDDone
 
 ; On entry RE -> the screen byte being cleared. Zero it in BOTH planes.
 ClearScreenBoth:

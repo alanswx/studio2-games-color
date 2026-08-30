@@ -227,7 +227,9 @@
 087A  BF                		phi 	rf
 087B  F8 51             		ldi 	10*8+1 										; row 8, byte 1
 087D  AF                		plo 	rf
-087E  F8 10             		ldi 	$10 										; set RE.1 to point to the current bit mask for Oring in.
+087E  F8 08             		ldi 	$08 										; set RE.1 to the current bit mask for Oring in. NOT a page --
+                        														; this value is OR'd straight into the screen at DRM_Loop1, so
+                        														; relocating it moves every wall corner one pixel across.
 0880  BE                		phi 	re
 0881  F8 0F             		ldi 	$0F 										; set RE.0 to the current byte #1 for Oring in.		
 0883  AE                		plo 	re
@@ -572,7 +574,7 @@
 09E4  0C                		ldn 	rc 											; read X position
 09E5  FA 07             		ani 	7 											; get the lower 3 bits - the shifting bits.
 09E7  FE                		shl 												; double and add to PartialXORPlot LSB
-09E8  FC 00             		adi 	<PartialXORPlot 							; this is the LSB of the routine address
+09E8  FC 14             		adi 	<PartialXORPlot 							; this is the LSB of the routine address
 09EA  BB                		phi 	rb 											; save in RB.1
 
 09EB  4C                		lda 	rc 											; get X, bump to point to Y RC[4], divide by 8.
@@ -1143,13 +1145,9 @@
                         ;
                         ; ***************************************************************************************************************************************
 
-0BF4                    WriteDisplayByte:
-0BF4  5E                		str 	re 											; save result
-0BF5  8E                		glo 	re 											; down one row
-0BF6  FC 08             		adi 	8
-0BF8  AE                		plo 	re
-0BF9  D3                		sep 	r3
-0BFA  30 F4             		br 		WriteDisplayByte
+0BF4                    WriteDisplayByte:                                           ; COLOUR: on the $E00 page, so it can
+0BF4  C0 0E00           		lbr 	WriteDisplayByteBoth 						; clear plane 1 too. Eight bytes either
+0BF7  00000000 00       		.db 	0,0,0,0,0 									; way, so nothing below here moves.
 
                         ; ***************************************************************************************************************************************
                         ;
@@ -1698,127 +1696,146 @@
 
 0E00                    		.org 	$E00
 
-0E00                    PartialXORPlot:
-0E00  30 5E             		br 		PX_Shift0 									; shift right x 0
-0E02  30 5D             		br 		PX_Shift1 									; shift right x 1
-0E04  30 5C             		br 		PX_Shift2 									; shift right x 2
-0E06  30 5B             		br 		PX_Shift3 									; shift right x 3
-0E08  30 5A             		br 		PX_Shift4 									; shift right x 4
-0E0A  30 59             		br 		PX_Shift5 									; shift right x 5
-0E0C  30 4B             		br 		PX_Shift6 									; shift right 8, shift left 2.
+                        ; The game-over score is written over whatever is still on screen -- an overwrite, not an XOR
+                        ; -- so plane 1 has to be cleared underneath it, or a robot that happened to be standing where
+                        ; a digit goes leaves its red behind as a yellow smudge.
+0E00                    WriteDisplayByteBoth:
+0E00  5E                		str 	re 											; save result
+0E01  9E                		ghi 	re 											; $11 -> $13
+0E02  FC 02             		adi 	2
+0E04  BE                		phi 	re
+0E05  F8 00             		ldi 	0
+0E07  5E                		str 	re 											; clear plane 1 at the same spot
+0E08  9E                		ghi 	re
+0E09  FF 02             		smi 	2
+0E0B  BE                		phi 	re
+0E0C  8E                		glo 	re 											; down one row
+0E0D  FC 08             		adi 	8
+0E0F  AE                		plo 	re
+0E10  D3                		sep 	r3
+0E11  C0 0BF4           		lbr 	WriteDisplayByte
 
-0E0E                    PX_Shift7:													; shift right 8, shift left 1.
-0E0E  FE                		shl 												; shift left, store in right half
-0E0F  BE                		phi 	re
-0E10  F8 00             		ldi 	0 											; D = DF, store in left half.
-0E12  7E                		shlc
-0E13  AE                		plo 	re
+0E14                    PartialXORPlot:
+0E14  30 72             		br 		PX_Shift0 									; shift right x 0
+0E16  30 71             		br 		PX_Shift1 									; shift right x 1
+0E18  30 70             		br 		PX_Shift2 									; shift right x 2
+0E1A  30 6F             		br 		PX_Shift3 									; shift right x 3
+0E1C  30 6E             		br 		PX_Shift4 									; shift right x 4
+0E1E  30 6D             		br 		PX_Shift5 									; shift right x 5
+0E20  30 5F             		br 		PX_Shift6 									; shift right 8, shift left 2.
 
-0E14                    PX_XorRE:													; XOR with RE, check collision.
-0E14  EF                		sex 	rf
+0E22                    PX_Shift7:													; shift right 8, shift left 1.
+0E22  FE                		shl 												; shift left, store in right half
+0E23  BE                		phi 	re
+0E24  F8 00             		ldi 	0 											; D = DF, store in left half.
+0E26  7E                		shlc
+0E27  AE                		plo 	re
 
-0E15  8E                		glo 	re 											; check collision.
-0E16  F2                		and
-0E17  32 1A             		bz 		PX_NoCollideLeftPart
-0E19  52                		str 	r2 											; set TOS non zero on collision
-0E1A                    PX_NoCollideLeftPart:
+0E28                    PX_XorRE:													; XOR with RE, check collision.
+0E28  EF                		sex 	rf
 
-0E1A  8E                		glo 	re 											; XOR [RF] with RE.0
-0E1B  F3                		xor 	
-0E1C  5F                		str 	rf
-0E1D  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
-0E1E  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
-0E20  3B 2D             		bnf 	_PXTintA 								; means object 2 or later: a robot or a robot's shot.
-0E22  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
-0E23  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
-0E25  BF                		phi 	rf 										; and so do the walls.
-0E26  8E                		glo 	re
-0E27  F3                		xor
-0E28  5F                		str 	rf
-0E29  9F                		ghi 	rf
-0E2A  FF 02             		smi 	2
-0E2C  BF                		phi 	rf
-0E2D                    _PXTintA:
-0E2D  1F                		inc 	rf 											; XOR [RF+1] with RE.1
+0E29  8E                		glo 	re 											; check collision.
+0E2A  F2                		and
+0E2B  32 2E             		bz 		PX_NoCollideLeftPart
+0E2D  52                		str 	r2 											; set TOS non zero on collision
+0E2E                    PX_NoCollideLeftPart:
 
-0E2E  9E                		ghi 	re 											; check collision.
-0E2F  F2                		and
-0E30  32 33             		bz 		PX_NoCollideRightPart
-0E32  52                		str 	r2 											; set TOS non zero on collision
-0E33                    PX_NoCollideRightPart:
+0E2E  8E                		glo 	re 											; XOR [RF] with RE.0
+0E2F  F3                		xor 	
+0E30  5F                		str 	rf
+0E31  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
+0E32  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
+0E34  3B 41             		bnf 	_PXTintA 								; means object 2 or later: a robot or a robot's shot.
+0E36  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
+0E37  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
+0E39  BF                		phi 	rf 										; and so do the walls.
+0E3A  8E                		glo 	re
+0E3B  F3                		xor
+0E3C  5F                		str 	rf
+0E3D  9F                		ghi 	rf
+0E3E  FF 02             		smi 	2
+0E40  BF                		phi 	rf
+0E41                    _PXTintA:
+0E41  1F                		inc 	rf 											; XOR [RF+1] with RE.1
 
-0E33  9E                		ghi 	re
-0E34  F3                		xor
-0E35  5F                		str 	rf
-0E36  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
-0E37  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
-0E39  3B 46             		bnf 	_PXTintB 								; means object 2 or later: a robot or a robot's shot.
-0E3B  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
-0E3C  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
-0E3E  BF                		phi 	rf 										; and so do the walls.
-0E3F  9E                		ghi 	re
-0E40  F3                		xor
-0E41  5F                		str 	rf
-0E42  9F                		ghi 	rf
-0E43  FF 02             		smi 	2
-0E45  BF                		phi 	rf
-0E46                    _PXTintB:
-0E46  8F                		glo 	rf 											; go down one row
-0E47  FC 07             		adi 	7
-0E49  AF                		plo 	rf
-0E4A  D5                		sep 	r5 											; and exit
+0E42  9E                		ghi 	re 											; check collision.
+0E43  F2                		and
+0E44  32 47             		bz 		PX_NoCollideRightPart
+0E46  52                		str 	r2 											; set TOS non zero on collision
+0E47                    PX_NoCollideRightPart:
 
-0E4B                    PX_Shift6:
-0E4B  FE                		shl 												; RE.10 = D >> 8 left 1.
-0E4C  BE                		phi 	re
-0E4D  F8 00             		ldi 	0
-0E4F  7E                		shlc
-0E50  AE                		plo 	re
-0E51  9E                		ghi 	re 											; shift it left once again
-0E52  FE                		shl
-0E53  BE                		phi 	re
-0E54  8E                		glo 	re
-0E55  7E                		shlc
-0E56  AE                		plo 	re
-0E57  30 14             		br 		PX_XorRE 									; and exclusive OR into video memory.
+0E47  9E                		ghi 	re
+0E48  F3                		xor
+0E49  5F                		str 	rf
+0E4A  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
+0E4B  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
+0E4D  3B 5A             		bnf 	_PXTintB 								; means object 2 or later: a robot or a robot's shot.
+0E4F  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
+0E50  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
+0E52  BF                		phi 	rf 										; and so do the walls.
+0E53  9E                		ghi 	re
+0E54  F3                		xor
+0E55  5F                		str 	rf
+0E56  9F                		ghi 	rf
+0E57  FF 02             		smi 	2
+0E59  BF                		phi 	rf
+0E5A                    _PXTintB:
+0E5A  8F                		glo 	rf 											; go down one row
+0E5B  FC 07             		adi 	7
+0E5D  AF                		plo 	rf
+0E5E  D5                		sep 	r5 											; and exit
 
-0E59                    PX_Shift5:													; shift right 6 and xor
-0E59  F6                		shr
-0E5A                    PX_Shift4:													; shift right 4 and xor
-0E5A  F6                		shr
-0E5B                    PX_Shift3:													; shift right 3 and xor
-0E5B  F6                		shr
-0E5C                    PX_Shift2:													; shift right 2 and xor
-0E5C  F6                		shr
-0E5D                    PX_Shift1:													; shift right 1 and xor
-0E5D  F6                		shr
-0E5E                    PX_Shift0:													; shift right 0 and xor
-0E5E  EF                		sex 	rf 											; XOR into RF
-0E5F  AE                		plo 	re 											; save pattern in RE.0
-0E60  F2                		and 	 											; and with screen
-0E61  32 64             		bz 		PX_NoCollideSingle 							; skip if zero e.g. no collision
-0E63  52                		str 	r2 											; set TOS non zero on collision
-0E64                    PX_NoCollideSingle:											
-0E64  8E                		glo 	re 											; restore pattern from RE.0
-0E65  F3                		xor
-0E66  5F                		str 	rf
-0E67  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
-0E68  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
-0E6A  3B 77             		bnf 	_PXTintC 								; means object 2 or later: a robot or a robot's shot.
-0E6C  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
-0E6D  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
-0E6F  BF                		phi 	rf 										; and so do the walls.
-0E70  8E                		glo 	re
-0E71  F3                		xor
-0E72  5F                		str 	rf
-0E73  9F                		ghi 	rf
-0E74  FF 02             		smi 	2
-0E76  BF                		phi 	rf
-0E77                    _PXTintC:
-0E77  8F                		glo 	rf 											; go down one row
-0E78  FC 08             		adi 	8
-0E7A  AF                		plo 	rf
-0E7B  D5                		sep 	r5 											; and exit
+0E5F                    PX_Shift6:
+0E5F  FE                		shl 												; RE.10 = D >> 8 left 1.
+0E60  BE                		phi 	re
+0E61  F8 00             		ldi 	0
+0E63  7E                		shlc
+0E64  AE                		plo 	re
+0E65  9E                		ghi 	re 											; shift it left once again
+0E66  FE                		shl
+0E67  BE                		phi 	re
+0E68  8E                		glo 	re
+0E69  7E                		shlc
+0E6A  AE                		plo 	re
+0E6B  30 28             		br 		PX_XorRE 									; and exclusive OR into video memory.
+
+0E6D                    PX_Shift5:													; shift right 6 and xor
+0E6D  F6                		shr
+0E6E                    PX_Shift4:													; shift right 4 and xor
+0E6E  F6                		shr
+0E6F                    PX_Shift3:													; shift right 3 and xor
+0E6F  F6                		shr
+0E70                    PX_Shift2:													; shift right 2 and xor
+0E70  F6                		shr
+0E71                    PX_Shift1:													; shift right 1 and xor
+0E71  F6                		shr
+0E72                    PX_Shift0:													; shift right 0 and xor
+0E72  EF                		sex 	rf 											; XOR into RF
+0E73  AE                		plo 	re 											; save pattern in RE.0
+0E74  F2                		and 	 											; and with screen
+0E75  32 78             		bz 		PX_NoCollideSingle 							; skip if zero e.g. no collision
+0E77  52                		str 	r2 											; set TOS non zero on collision
+0E78                    PX_NoCollideSingle:											
+0E78  8E                		glo 	re 											; restore pattern from RE.0
+0E79  F3                		xor
+0E7A  5F                		str 	rf
+0E7B  8C                		glo 	rc 										; COLOUR: object records are 6 bytes from $00, and RC is
+0E7C  FF 11             		smi 	$11 										; parked at base+5 here, so base >= $0C -- RC.0 >= $11 --
+0E7E  3B 8B             		bnf 	_PXTintC 								; means object 2 or later: a robot or a robot's shot.
+0E80  9F                		ghi 	rf 										; mirror the same pattern into plane 1, which turns it
+0E81  FC 02             		adi 	2 										; red. Player (object 0) and his missile (1) stay cyan,
+0E83  BF                		phi 	rf 										; and so do the walls.
+0E84  8E                		glo 	re
+0E85  F3                		xor
+0E86  5F                		str 	rf
+0E87  9F                		ghi 	rf
+0E88  FF 02             		smi 	2
+0E8A  BF                		phi 	rf
+0E8B                    _PXTintC:
+0E8B  8F                		glo 	rf 											; go down one row
+0E8C  FC 08             		adi 	8
+0E8E  AF                		plo 	rf
+0E8F  D5                		sep 	r5 											; and exit
 
                         ; ***************************************************************************************************************************************
                         ;														Plot Character in RC
@@ -1867,14 +1884,14 @@ MO_NOUPDATEDIRECTION                          0A40    MO_PLAYERHITFRAME  0AA7
 MO_REDRAW          0A5F    MO_TIMETOMOVE      0A29    NEWROOM            0C1D
 NORTHDOOR          00E4 E  OBJECTCOUNT        000A E  OBJECTEND          003C E
 OBJECTLOOP         0C51    OBJECTRECORDSIZE   0006 E  OBJECTSTART        0000 E
-OUTPUTCHAR         0CE7    PARTIALXORPLOT     0E00    PCCOMPLETE         0A0B
+OUTPUTCHAR         0CE7    PARTIALXORPLOT     0E14    PCCOMPLETE         0A0B
 PCLOOP             0A03    PLAYERMISSILEOBJECT                           0006 E
 PLAYEROBJECT       0000 E  PLOTCHARACTER      09DE    
-PX_NOCOLLIDELEFTPART                          0E1A    
-PX_NOCOLLIDERIGHTPART                         0E33    PX_NOCOLLIDESINGLE 0E64
-PX_SHIFT0          0E5E    PX_SHIFT1          0E5D    PX_SHIFT2          0E5C
-PX_SHIFT3          0E5B    PX_SHIFT4          0E5A    PX_SHIFT5          0E59
-PX_SHIFT6          0E4B    PX_SHIFT7          0E0E    PX_XORRE           0E14
+PX_NOCOLLIDELEFTPART                          0E2E    
+PX_NOCOLLIDERIGHTPART                         0E47    PX_NOCOLLIDESINGLE 0E78
+PX_SHIFT0          0E72    PX_SHIFT1          0E71    PX_SHIFT2          0E70
+PX_SHIFT3          0E6F    PX_SHIFT4          0E6E    PX_SHIFT5          0E6D
+PX_SHIFT6          0E5F    PX_SHIFT7          0E22    PX_XORRE           0E28
 R0                 0000 E  R1                 0001 E  R2                 0002 E
 R3                 0003 E  R4                 0004 E  R5                 0005 E
 R6                 0006 E  R7                 0007 E  R8                 0008 E
@@ -1889,7 +1906,8 @@ UKSFOUND           0B34    UKSNOFIRE          0B3F    UKSSCAN            0B29
 UPDATEKEYBOARDSTATE                           0B26    VIDEOPAGE          0011 E
 VTBL_COLLISIONCHECKORFIRE                     0B1C    VTBL_GETDIRECTION  0B08
 VTBL_GETGRAPHICCHARACTER                      0B12    WAITKEY5           0C12
-WESTDOOR           00E7 E  WRITEDISPLAYBYTE   0BF4    XADJUSTSTART       007D E
+WESTDOOR           00E7 E  WRITEDISPLAYBYTE   0BF4    
+WRITEDISPLAYBYTEBOTH                          0E00    XADJUSTSTART       007D E
 XROOM              00E0 E  XYOFFSETTABLE      0AD7    YADJUSTSTART       00E3 E
-YROOM              00E1 E  _PXTINTA           0E2D    _PXTINTB           0E46
-_PXTINTC           0E77
+YROOM              00E1 E  _PXTINTA           0E41    _PXTINTB           0E5A
+_PXTINTC           0E8B
