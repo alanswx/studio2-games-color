@@ -1,0 +1,1645 @@
+0000                    	.org	000h
+0000                    	.include "1802.inc"               ; Include the R0-R15 definitions
+      = 0000            r0      = 0
+      = 0001            r1      = 1
+      = 0002            r2      = 2
+      = 0003            r3      = 3
+      = 0004            r4      = 4
+      = 0005            r5      = 5
+      = 0006            r6      = 6
+      = 0007            r7      = 7
+      = 0008            r8      = 8
+      = 0009            r9      = 9
+      = 000A            ra      = 10
+      = 000B            rb      = 11
+      = 000C            rc      = 12
+      = 000D            rd      = 13
+      = 000E            re      = 14
+      = 000F            rf      = 15
+
+      = 0800            RAM  = 0800h                              ; System/Data memory page
+      = 08BF            RAMStack = RAM+BFh                        ; Initial stack value
+
+0000                    Reset:
+0000  90                	        ghi r0               ; Clear accumulator (D=0 on reset)
+0001  B1                	        phi r1               ; R1.High = Interrupt
+0002  F8 08             	        ldi RAM / 256        ; D = System Memory Page
+0004  B2                	        phi r2               ; R2.High = Stack Base
+0005  F8 14             	        ldi VideoInt & 255   ; R1.Low = Interrupt Routine
+0007  A1                	        plo r1               ;
+0008  F8 BF             	        ldi RAMStack & 255   ; R2.Low = Stack Base
+000A  A2                	        plo r2               ;
+000B  F8 04             		ldi colourInit / 256 ; R3.High = the colour page first
+000D  B3                	        phi r3               ;
+000E  F8 00             	        ldi colourInit & 255 ; R3.Low
+0010  A3                	        plo r3               ;
+0011  D3                		sep r3       ; Go to start
+0012                    _return:
+0012  72                		ldxa
+0013  70                		ret
+0014                    VideoInt:
+0014  22                		dec r2
+0015  78                		sav
+0016  22                		dec r2
+0017  52                		str r2
+0018  C4                		nop
+0019  C4                		nop
+001A  C4                		nop
+001B  F8 00             		ldi 00
+001D  B0                		phi r0
+001E  F8 00             		ldi 00
+0020  A0                		plo r0
+0021  80                _loop:		glo r0
+0022  E2                		sex r2
+0023  E2                		sex r2
+0024  20                		dec r0
+0025  A0                		plo r0
+0026  E2                		sex r2
+0027  20                		dec r0
+0028  A0                		plo r0
+0029  E2                		sex r2
+002A  20                		dec r0
+002B  A0                		plo r0
+002C  3C 21             		bn1 _loop
+002E  30 12             		br _return
+                        			
+
+      = 001B            MAX_SEGMENT_Y = 27	;up to 31
+      = 0017            MAX_SPEED = 23 ;230
+      = 0000            TIMER_START_LO = 0
+      = 0009            TIMER_START_HI = 9
+      = 0011            START_PERSPECTIVE_Y = 17
+      = 0065            LIGHT_POSITION_Y = 101 ;lower byte
+      = 0008            WHEEL_LIMIT = 8 ;-8..8
+      = 0004            WHEEL_LIMIT_SPEEDUP = 4
+      = 003F            CAR_X_LIMIT = 63 ;-63..63
+      = 0007            SPEED_SKID_START = 7
+      = 0037            ROAD_LIMIT = 55	;-55..55
+      = 000B            MAX_SPEED_ROADSIDE = 11	;(110)
+      = 0004            DEC_SPEED_ROADSIDE = 4
+
+
+      = 0002            rDataPointer = 2
+      = 0003            r3Buf = 3
+      = 0004            r4buf = 4
+      = 0005            r5Buf = 5
+
+      = 0006            rLoTimer = 6
+      = 0006            rHiCounter = 6
+      = 0007            rScreenYAdr = 7
+      = 0008            rHiCarX = 8
+      = 0008            rLoWheel = 8
+      = 0009            rLoDxCorr = 9
+      = 0009            rHiDeltaX = 9
+      = 000A            rRoadSectorAdr = 10
+      = 000B            rMarksWidthY = 11
+      = 000C            rHiSpeed = 12
+      = 000C            rloSpeedCounter = 12
+      = 000F            rGlobalState = 15
+
+      = 0033            mRoadSize = 51
+      = 0034            mRoadStartAdr = 52
+      = 0035            mPerspectiveY = 53
+                        ;54-56 used
+      = 0039            mData = 57
+
+      = 003A            mSpeedHi = 58
+      = 003C            mSpeedLo = 60
+      = 003D            mSpeedSpace = 61
+      = 003E            mTimerHiSpace = 62
+      = 003F            mTimerHi = 63
+      = 0040            mTimerLow = 64
+      = 0041            mTimerLowSpace = 65
+      = 0042            mScoreSpace = 66
+      = 0043            mScoreHi = 67
+      = 0047            mScoreLow = 71
+
+      = 0858            mBtmDigits = RAM+88
+      = 0880            mBtmHorizonStart = RAM+128
+      = 08FF            mBtmHorizonEnd = RAM+255
+
+0100                    	.org 100h
+0100                    start:
+0100  E2                		sex r2
+0101  22                		dec r2
+0102  69                		inp 1		; turns video on
+0103  12                		inc r2
+                        		;disable interrupt and set X = 2, P = 3
+0104  E3                		sex r3
+0105  71                		dis
+0106  23                		.db  $23
+                        		
+0107  7A                		req ;sound off
+
+0108  F8 08             		ldi >RAM
+010A  B2                		phi rDataPointer
+010B  B7                		phi rScreenYAdr
+
+010C                    clearRam:
+010C  F8 FF             		ldi <(RAM+255)
+010E                    clearRamLoop:
+010E  A2                		plo rDataPointer		;with faster loop real Studio not starting
+010F  F8 00             		ldi 0
+0111  73                		stxd
+0112  82                		glo rDataPointer
+0113  3A 0E             		bnz clearRamLoop
+
+0115  B6                		phi rLoTimer		; = 0
+
+
+0116  F8 0D             		ldi >marksWidthY
+0118  BB                		phi rMarksWidthY
+0119  F8 00             		ldi <marksWidthY
+011B  AB                		plo rMarksWidthY
+
+011C  F8 0D             		ldi >roadData1
+011E  BA                		phi rRoadSectorAdr
+011F  F8 AE             		ldi <roadData1
+0121  AA                		plo rRoadSectorAdr
+
+0122  F8 01             		ldi 1
+0124  AF                		plo rGlobalState
+
+0125  F8 00             		ldi <menuWaitVsync
+0127  A1                		plo r1
+0128  F8 0F             		ldi >menuWaitVsync
+012A  B1                		phi r1
+012B  D1                		sep r1
+
+
+012C                    scanAccelKey:
+012C  E1                		sex r1
+012D  62                		out 2
+012E  05                		.db 5
+012F  F8 00             		ldi 0
+0131  3F 36             		bn4 notBreak
+0133  9C                		ghi rHiSpeed
+0134  F6                		shr
+0135  F6                		shr
+0136                    notBreak:
+0136  FC 01             		adi 1
+0138  A4                		plo r4buf
+
+0139  E1                		sex r1
+013A  62                		out 2
+013B  02                		.db 2
+013C  F8 3A             		ldi mSpeedHi
+013E  A2                		plo rDataPointer
+013F  E2                		sex rDataPointer
+
+                        		;conver speed 0-200 to 0-20 to save in rSpeed hi
+0140  02                		ldn rDataPointer
+0141  FE                		shl 					;mul 10
+0142  FE                		shl
+0143  FE                		shl
+0144  F4                		add
+0145  F4                		add
+0146  12                		inc rDataPointer
+0147  F4                		add
+0148  BC                		phi rHiSpeed
+0149  12                		inc rDataPointer
+
+014A  FF 0B             		smi MAX_SPEED_ROADSIDE
+014C  3B 64             		bnf noNeedDecSpeed
+                        		; if speed more MAX_SPEED_ROADSIDE
+014E  98                		ghi rHiCarX
+014F  FC 37             		adi ROAD_LIMIT
+0151  FC 91             		adi 255-ROAD_LIMIT*2
+0153  3B 59             		bnf checkTurn			;and check car X pos, if on roadside then dec dpeed
+0155  F8 04             		ldi DEC_SPEED_ROADSIDE
+0157  30 6B             		br decSpeedNext
+0159                    checkTurn:
+0159  02                		ldn rDataPointer
+015A  F6                		shr
+015B  33 64             		bdf noNeedDecSpeed		;only odd speed for speed flicker
+015D  88                		glo rLoWheel
+015E  FC 04             		adi WHEEL_LIMIT_SPEEDUP
+0160  FC F7             		adi 255-WHEEL_LIMIT_SPEEDUP*2
+0162  33 66             		bdf decSpeed 			;check turn adder more half and not inc speed if true
+
+0164                    noNeedDecSpeed:
+0164  37 76             		b4 incSpeed
+
+0166                    decSpeed:
+0166  9C                		ghi rHiSpeed
+0167  F4                		add		
+0168  32 85             		bz changeSpeedEnd
+
+016A  84                		glo r4buf
+016B                    decSpeedNext:
+016B  F5                		sd 				;b for -2 for low byte
+016C  52                		str rDataPointer
+016D  33 85             		bdf changeSpeedEnd
+016F  FC 0A             		adi 10
+0171  73                		stxd
+0172  F8 01             		ldi 1
+0174  30 6B             		br decSpeedNext
+
+0176                    incSpeed:
+0176  9C                		ghi rHiSpeed
+0177  FF 17             		smi MAX_SPEED
+0179  33 85             		bdf changeSpeedEnd
+017B  F8 01             		ldi 1
+017D  38                		skp
+017E                    incSpeedLoop:
+017E  73                		stxd
+017F  74                		adc
+0180  52                		str rDataPointer
+0181  FF 0A             		smi 10
+0183  33 7E             		bdf incSpeedLoop
+0185                    changeSpeedEnd:
+
+0185                    updateTimerBtm:
+0185  86                		glo rLoTimer
+0186  FA C0             		ani 0xC0
+0188  32 AD             		bz updateTimerBtmEnd
+018A  86                		glo rLoTimer
+018B  FA 0F             		ani 0x0F
+018D  A6                		plo rLoTimer
+018E  F8 40             		ldi mTimerLow	
+0190  A2                		plo rDataPointer
+0191  02                		ldn rDataPointer
+0192  3A AA             		bnz updateTimerBtmDec
+0194  F8 09             		ldi 9
+0196  73                		stxd
+0197  02                		ldn rDataPointer
+0198  3A AA             		bnz updateTimerBtmDec
+019A  F8 FF             		ldi 255
+019C  AF                		plo rGlobalState	;game over
+019D  12                		inc rDataPointer
+019E  12                		inc rDataPointer
+019F  F8 0B             		ldi <chrR
+01A1  73                		stxd
+01A2  F8 0C             		ldi <chrE
+01A4  73                		stxd
+01A5  F8 0D             		ldi <chrV
+01A7  73                		stxd
+01A8  F8 01             		ldi 1				;after -1 is chr0
+01AA                    updateTimerBtmDec:
+01AA  FF 01             		smi 1
+01AC  73                		stxd
+01AD                    updateTimerBtmEnd:
+
+01AD                    drawSpeedAndTimer:
+01AD  F8 3A             		ldi <mSpeedHi
+01AF  A2                		plo rDataPointer
+01B0  F8 3A             		ldi <digitsPos
+01B2  A3                		plo r3Buf
+
+
+01B3                    drawString:
+                        ;508; 43
+01B3  F8 0C             		ldi >chr0
+01B5  B5                		phi r5Buf
+01B6  B4                		phi r4buf
+01B7  B3                		phi r3Buf
+01B8  E7                		sex rScreenYAdr
+
+01B9  43                		lda r3Buf
+01BA                    drawStringMainLoop:
+01BA  A7                		plo rScreenYAdr
+01BB  42                		lda rDataPointer
+01BC  A5                		plo r5Buf
+01BD  05                		ldn r5Buf
+01BE  A5                		plo r5Buf
+01BF  42                		lda rDataPointer
+01C0  A4                		plo r4buf
+01C1  04                		ldn r4buf
+01C2  A4                		plo r4buf					
+
+01C3                    drawTwoCharsLoop:
+01C3  45                		lda r5Buf
+01C4  FA F0             		ani $F0
+01C6  57                		str rScreenYAdr
+01C7  44                		lda r4buf
+01C8  FA 0F             		ani $0F
+01CA  F1                		or
+01CB  57                		str rScreenYAdr
+01CC  87                		glo rScreenYAdr
+01CD  FC 08             		adi 8
+01CF  A7                		plo rScreenYAdr
+01D0  FF 80             		smi <mBtmDigits+8*5
+01D2  3B C3             		bnf drawTwoCharsLoop
+                        		
+01D4  43                		lda r3Buf				;next scr adr
+01D5  3A BA             		bnz drawStringMainLoop
+
+01D7  C0 02F9           		lbr waitVsync
+
+
+01F9                    		.org $200-7
+01F9                    drawRoad:
+
+      = 0003            r14h_PixelData = r3Buf
+      = 0004            r15h_PixelData = r4buf
+      = 0005            rRowAdr = r5Buf
+
+01F9  F8 07             		ldi >pixelData
+01FB  B3                		phi r14h_PixelData
+01FC  B4                		phi r15h_PixelData
+01FD  F8 09             		ldi >(RAM+256)
+01FF  B5                		phi rRowAdr
+
+0200                    clearRoad:
+0200  E5                		sex rRowAdr
+0201                    clearRoadSkipZeroLoop:
+0201  4B                		lda rMarksWidthY
+0202  32 01             		bz clearRoadSkipZeroLoop
+0204                    clearRoadLoop:
+0204  4B                		lda rMarksWidthY
+0205  A5                		plo rRowAdr
+0206  F8 00             		ldi 0
+0208  73                		stxd
+0209  73                		stxd
+020A  73                		stxd
+020B  73                		stxd
+020C  73                		stxd
+020D  73                		stxd
+020E  73                		stxd
+020F  55                		str rRowAdr
+0210  4B                		lda rMarksWidthY
+0211  32 01             		bz clearRoadSkipZeroLoop
+0213  FA 01             		ani 1
+0215  32 04             		bz clearRoadLoop
+
+0217  A7                		plo rScreenYAdr				;rScreenYAdr = 0
+                        		
+0218  9C                		ghi rHiSpeed
+0219  32 1C             		bz drawPrevious			;just redraw when speed = 0
+021B  1B                		inc rMarksWidthY
+021C                    drawPrevious:
+021C  0B                		ldn rMarksWidthY
+021D  AB                		plo rMarksWidthY
+
+021E                    updateDeltaXAndDxCorr:
+021E  E2                		sex rDataPointer
+021F  F8 39             		ldi <mData
+0221  A2                		plo rDataPointer
+0222  F8 80             		ldi 128
+0224  52                		str rDataPointer 		; lineError = 128
+0225  98                		ghi rHiCarX
+0226  FE                		shl
+0227  FE                		shl
+0228  3B 57             		bnf drawI
+
+022A                    drawD:
+022A  FB FC             		xri 11111100b
+022C  FC 04             		adi 00000100b
+022E  B9                		phi rHiDeltaX
+022F  F8 23             		ldi 35
+0231  A9                		plo rLoDxCorr
+0232                    drawLoopD:
+0232  17                		inc rScreenYAdr
+0233  99                		ghi rHiDeltaX
+0234  F4                		add
+0235  52                		str rDataPointer				; set error; X to xCorr
+0236  33 39             		bdf drawIfMarkD
+0238  19                		inc rLoDxCorr
+0239                    drawIfMarkD:
+0239  4B                		lda rMarksWidthY
+023A  32 32             		bz drawLoopD		
+
+023C  89                		glo rLoDxCorr
+023D  FE                		shl
+023E  E7                        sex rScreenYAdr
+023F  F4                        add
+0240  A4                		plo r15h_PixelData
+0241  2B                		dec rMarksWidthY
+0242  EB                		sex rMarksWidthY
+0243  F7                		sm
+0244  A3                		plo r14h_PixelData
+0245  1B                		inc rMarksWidthY
+                        		;calc screen offset for left road border
+0246  43                		lda r14h_PixelData
+0247  F5                		sd
+0248  A5                		plo rRowAdr
+0249  03                		ldn r14h_PixelData
+024A  55                		str rRowAdr				;put pixel
+                        		;calc screen offset for right road border
+024B  44                		lda r15h_PixelData
+024C  F5                		sd
+024D  A5                		plo rRowAdr
+024E  04                		ldn r15h_PixelData
+024F  55                		str rRowAdr 			;put pixel
+
+0250  4B                		lda rMarksWidthY
+0251  F4                		add
+0252  E2                		sex rDataPointer
+0253  3A 32             		bnz drawLoopD
+0255  30 7E             		br drawRoadEnd
+
+0257                    drawI:
+0257  B9                		phi rHiDeltaX
+0258  F8 1D             		ldi 29
+025A  A9                		plo rLoDxCorr
+025B                    drawLoopI:
+025B  17                		inc rScreenYAdr
+025C  99                		ghi rHiDeltaX
+025D  F4                		add
+025E  52                		str rDataPointer
+025F  33 62             		bdf drawIfMarkI
+0261  29                		dec rLoDxCorr
+0262                    drawIfMarkI:
+0262  4B                		lda rMarksWidthY
+0263  32 5B             		bz drawLoopI
+0265  89                		glo rLoDxCorr
+0266  FE                		shl
+0267  E7                        sex rScreenYAdr
+0268  F4                        add
+0269  A4                		plo r15h_PixelData
+026A  2B                		dec rMarksWidthY
+026B  EB                		sex rMarksWidthY
+026C  F4                		add
+026D  A3                		plo r14h_PixelData
+026E  1B                		inc rMarksWidthY
+                        		;calc screen offset for left road border
+026F  43                		lda r14h_PixelData
+0270  F5                		sd
+0271  A5                		plo rRowAdr
+0272  03                		ldn r14h_PixelData
+0273  55                		str rRowAdr				;put pixel
+                        		;calc screen offset for right road border
+0274  44                		lda r15h_PixelData
+0275  F5                		sd
+0276  A5                		plo rRowAdr
+0277  04                		ldn r15h_PixelData
+0278  55                		str rRowAdr 			;put pixel
+
+0279  4B                		lda rMarksWidthY
+027A  F4                		add
+027B  E2                		sex rDataPointer
+027C  3A 5B             		bnz drawLoopI
+027E                    drawRoadEnd:
+027E  1B                		inc rMarksWidthY
+
+                        		
+027F  F8 34             		ldi <mRoadStartAdr
+0281  A2                		plo rDataPointer
+0282  8A                		glo rRoadSectorAdr
+0283  F7                		sm
+0284  32 95             		bz drawFinishLine
+0286  22                		dec rDataPointer
+0287  F7                		sm
+0288  3A BA             		bnz drawCar
+
+028A  12                		inc rDataPointer
+028B  12                		inc rDataPointer
+028C  02                		ldn rDataPointer
+028D  22                		dec rDataPointer
+028E  FC EF             		adi 256-START_PERSPECTIVE_Y
+0290  3B 95             		bnf drawFinishLine
+0292  F8 0C             		ldi 12
+0294  AF                		plo rGlobalState
+
+0295                    drawFinishLine:
+0295  12                		inc rDataPointer
+0296  E5                		sex rRowAdr
+0297  02                		ldn rDataPointer
+0298  FE                		shl
+0299  FE                		shl
+029A  FE                		shl
+029B  FC 0F             		adi 15
+029D  A5                		plo rRowAdr
+029E  FC C4             		adi 196
+02A0  F8 55             		ldi 0x55
+02A2  3B AC             		bnf drawFinishOneLine
+
+02A4                    drawFinishLineLoop:
+02A4  73                		stxd
+02A5  73                		stxd
+02A6  73                		stxd
+02A7  73                		stxd
+02A8  73                		stxd
+02A9  73                		stxd
+02AA  73                		stxd
+02AB  73                		stxd
+02AC                    drawFinishOneLine:
+02AC  FE                		shl
+02AD  3B A4             		bnf drawFinishLineLoop
+02AF  F8 00             		ldi 0
+02B1  73                		stxd
+02B2  73                		stxd
+02B3  73                		stxd
+02B4  73                		stxd
+02B5  73                		stxd
+02B6  73                		stxd
+02B7  73                		stxd
+02B8  73                		stxd
+02B9  15                		inc rRowAdr
+
+02BA                    drawCar:
+02BA  E5                		sex rRowAdr
+02BB  0B                		ldn rMarksWidthY
+02BC  AB                		plo rMarksWidthY
+02BD  F8 0C             		ldi >btmCar
+02BF  B3                		phi r3Buf
+                        		
+02C0  88                		glo rLoWheel
+02C1  32 CC             		bz drawCarCenter
+02C3  FE                		shl
+02C4  F8 4C             		ldi <btmCarLeft
+02C6  3B CE             		bnf drawCarLeft
+02C8  F8 56             		ldi <btmCarRight
+02CA  30 DC             		br drawCarRight
+02CC                    drawCarCenter:
+02CC  F8 42             		ldi <btmCarCenter
+02CE                    drawCarLeft:
+02CE  A3                		plo r3Buf
+02CF  43                		lda r3Buf
+02D0                    drawCarTopLoop:
+02D0  A5                		plo rRowAdr
+02D1  43                		lda r3Buf
+02D2  F1                		or
+02D3  73                		stxd
+02D4  43                		lda r3Buf
+02D5  F1                		or
+02D6  73                		stxd
+02D7  43                		lda r3Buf
+02D8  3A D0             		bnz drawCarTopLoop
+
+02DA  F8 5F             		ldi <btmCar
+02DC                    drawCarRight:
+02DC  A3                		plo r3Buf
+02DD  43                		lda r3Buf
+02DE                    drawCarLoop:
+02DE  A5                		plo rRowAdr
+02DF  43                		lda r3Buf
+02E0  73                		stxd
+02E1  43                		lda r3Buf
+02E2  73                		stxd
+02E3  43                		lda r3Buf
+02E4  3A DE             		bnz drawCarLoop
+
+                        		
+02E6  9C                		ghi rHiSpeed
+02E7  FF 03             		smi 3
+02E9  3B F9             		bnf waitVsync
+02EB  96                		ghi rHiCounter
+02EC  FA 02             		ani 0x02
+02EE  32 F9             		bz waitVsync
+02F0  F8 DC             		ldi 220
+02F2  A5                		plo rRowAdr
+02F3  F8 B0             		ldi 10110000b
+02F5  73                		stxd
+02F6  F8 0D             		ldi 00001101b
+02F8  73                		stxd
+
+
+
+02F9                    waitVsync:					;wait 1861 interrupt
+02F9  E1                		sex r1
+02FA  70                		ret
+02FB  21                		.db  $21
+02FC  00                		idl
+02FD  C0 0300           		lbr displayRefresh
+
+
+
+0300                    		.org $300
+0300                    displayRefresh:
+0300  F8 72             		ldi <btmTopText
+0302  A0                		plo r0
+0303  F8 0C             		ldi >btmTopText
+0305  B0                		phi r0
+                        		;any code <21 cicles, cicles count mast be a multiple by 3
+0306                    displayWait0:
+0306  E2                		sex rDataPointer
+0307  80                		glo r0
+0308  FF 8A             		smi <(8*5+btmTopText-16)
+030A  3A 06             		bnz displayWait0
+030C  F8 07             		ldi >zero128b
+
+                        		;draw 3 space after digits
+030E  B0                		phi r0
+030F  F8 80             		ldi <zero128b
+0311  A0                		plo r0
+
+0312                    updateTimer:
+                        		;should take 5 cycles
+0312  86                		glo rLoTimer
+0313  FA 0F             		ani 0x0F
+0315  32 18             		bz fixTimer
+0317  38                		skp
+0318                    fixTimer:	
+0318  16                		inc rLoTimer
+0319                    incTimer:	
+0319  16                		inc rLoTimer
+
+031A  F8 08             		ldi >mBtmDigits
+
+                        		;first digits line in 128
+031C  B0                		phi r0
+031D  F8 58             		ldi <mBtmDigits
+031F  A0                		plo r0
+
+                        		;second line in 64
+0320  91                		ghi r1
+0321  B3                		phi r3Buf
+0322  80                		glo r0
+
+0323  A0                		plo r0
+0324  F8 2A             		ldi <displayWait1
+0326  A3                		plo r3Buf
+
+                        		;third line in 128
+0327  E2                		sex rDataPointer
+0328  E2                		sex rDataPointer
+0329  D3                		sep r3Buf
+
+                        		;fourth and fifth line in 64
+032A                    displayWait1:
+032A  E2                		sex rDataPointer
+032B  E2                		sex rDataPointer
+032C  80                		glo r0
+                        		
+032D  A0                		plo r0
+032E  F8 07             		ldi >zero128b
+0330  D1                		sep r1
+
+                        		;draw space after digits
+0331  B0                		phi r0
+0332  F8 80             		ldi <zero128b
+0334  A0                		plo r0
+
+0335                    displayWait2:
+0335  80                		glo r0
+0336  FF F0             		smi 240
+0338  3A 35             		bnz displayWait2
+
+033A  F8 98             		ldi <152
+033C  A0                		plo r0
+033D  E2                		sex rDataPointer
+033E                    displayWait3:
+033E  80                		glo r0
+033F  FF F8             		smi 248
+0341  3A 3E             		bnz displayWait3
+
+                        		;draw horizon
+0343  F8 80             		ldi <mBtmHorizonStart
+0345  A0                		plo r0
+                        		
+0346                    displayWait4:	
+0346  80                		glo r0
+0347  FF F0             		smi 240
+0349  3A 46             		bnz displayWait4
+
+                        		;draw space after horizon
+034B  F8 07             		ldi >zero128b
+034D  B0                		phi r0
+
+034E  F8 E0             		ldi 224
+0350  A0                		plo r0
+0351                    displayWait5:
+0351  80                		glo r0
+0352  FF F8             		smi 248
+0354  3A 51             		bnz displayWait5
+                        		
+                        		;sex rDataPointer ;need del inc rLoTimer
+                        		;glo rLoTimer ;for gray bkg, need ldi 13
+                        		;shr
+                        		;bdf displayTest ;$+6
+                        		;ldi >$E00
+                        		;phi r0
+                        		;br displayTest2
+
+                        		;draw road in 64
+0356                    displayTest:
+0356  F8 09             		ldi >(RAM+256)
+0358                    displayTest2:
+0358  B0                		phi r0
+0359                    displayWait6:
+0359  80                		glo r0
+035A  20                		dec r0
+035B  A0                		plo r0
+035C  E2                		sex rDataPointer
+035D  FF F8             		smi 248
+035F  3A 59             		bnz displayWait6
+
+0361                    main:
+
+0361                    checkGlobalState:
+0361  8F                		glo rGlobalState
+0362  CA 0600           		lbnz selectGlobalState
+
+0365                    updateSpeed:
+0365  8C                		glo rloSpeedCounter
+0366  32 6E             		bz resetSpeedCounter
+0368  FE                		shl
+0369  33 74             		bdf incSpeedCounter
+036B                    decSpeedCounter:
+036B  2C                		dec rloSpeedCounter
+036C  30 78             		br moreCalledAtHigherSpeed
+036E                    resetSpeedCounter:
+036E  9C                		ghi rloSpeedCounter
+036F  FF 0A             		smi 10							;define start speed, lower - faster
+0371  AC                		plo rloSpeedCounter
+0372  3B 78             		bnf moreCalledAtHigherSpeed
+0374                    incSpeedCounter:
+0374  1C                		inc rloSpeedCounter				;rHiSpeed may be corrupted but it will be set in scanAccelKey
+                        		
+0375                    lessCalledAtHigherSpeed:
+0375  C0 012C           		lbr scanAccelKey
+
+0378                    moreCalledAtHigherSpeed:
+0378  96                		ghi rHiCounter
+0379  FC 01             		adi 1
+037B  B6                		phi rHiCounter
+037C  F6                		shr
+037D  CB 01F9           		lbnf drawRoad ;drawRoad every second frame
+
+
+0380                    scanTurnKey:
+0380  88                		glo rLoWheel
+0381  FC 08             		adi WHEEL_LIMIT
+0383  FC EF             		adi 255-WHEEL_LIMIT*2
+0385  88                		glo rLoWheel
+0386  33 91             		bdf noKey
+0388  E1                		sex r1
+0389  62                		out 2
+038A  06                		.db 6
+038B  37 99             		b4 decrKey
+038D  62                		out 2
+038E  04                		.db 4
+038F  37 97             		b4 incrKey
+0391                    noKey:
+0391  32 9C             		bz scanTurnKeyEnd
+0393  FE                		shl
+0394  88                		glo rLoWheel
+0395  3B 99             		bnf decrKey
+0397                    incrKey:
+0397  FC 02             		adi 2
+0399                    decrKey:
+0399  FF 01             		smi 1
+039B  A8                		plo rLoWheel
+039C                    scanTurnKeyEnd:
+
+
+039C  9C                		ghi rHiSpeed
+039D  C2 02F9           		lbz waitVsync
+
+03A0  C0 0500           		lbr calcRoadOrShiftHorizon
+                        	
+
+0400                    		.org $400
+                        ; ---------------------------------------------------------------------------
+                        ;  CDP1864 colour. Race has no framebuffer -- displayRefresh points R0 straight
+                        ;  at ROM data and re-points it per scanline -- so the 1864 picks its colour
+                        ;  cell from the ADDRESS being fetched, not the screen row:
+                        ;
+                        ;        col_index = {addr[7:5], addr[2:0]}
+                        ;
+                        ;  addr[2:0] is the byte across the line, exactly as normal. addr[7:5] is the
+                        ;  32-byte block the data sits in. So colour attaches to WHICH GRAPHIC is being
+                        ;  fetched, not where it lands -- per-element colour, which no framebuffer game
+                        ;  on this hardware can have. This table is eight distinct colours, one per
+                        ;  block, to read off which element is fed from where.
+                        ; ---------------------------------------------------------------------------
+0400                    colourInit:
+0400  E3                		sex r3					;interrupts are still live at this point in Reset
+0401  71                		dis						;and R1 still points at the VideoInt stub, which
+0402  23                		.db  $23				;would run all through the loop below. Kill them
+                        								;first, exactly as start does: X=2, P=3, IE=0.
+                        		;OUT 1 would step the background off blue, but on this machine the
+                        		;1861 path takes OUT 1 as display-off as well, so it is left alone.
+0403  F8 0B             		ldi $0B					;R4 -> the colour window
+0405  B4                		phi r4
+0406  F8 00             		ldi 0
+0408  A4                		plo r4
+0409  F8 04             		ldi >bandTable
+040B  B5                		phi r5
+040C  F8 25             		ldi <bandTable
+040E  A5                		plo r5
+040F                    ciBand:
+040F  45                		lda r5					;colour for this 32-byte block
+0410  A6                		plo r6
+0411  F8 08             		ldi 8					;eight cells share it
+0413  B6                		phi r6
+0414                    ciCell:
+0414  86                		glo r6
+0415  54                		str r4
+0416  14                		inc r4
+0417  96                		ghi r6
+0418  FF 01             		smi 1
+041A  B6                		phi r6
+041B  3A 14             		bnz ciCell
+041D  84                		glo r4
+041E  FB 40             		xri 64
+0420  3A 0F             		bnz ciBand
+0422  C0 0100           		lbr start
+
+0425  01030405 06070103 bandTable:	.db 1,3,4,5,6,7,1,3		;red magenta green yellow cyan white red magenta
+
+0500                    		.org $500
+0500                    calcRoadOrShiftHorizon:
+
+
+0500                    updateCarX:
+0500  F8 39             		ldi <mData
+0502  A2                		plo rDataPointer
+0503  E2                		sex rDataPointer
+0504  98                		ghi rHiCarX
+0505  52                		str rDataPointer
+0506  88                		glo rLoWheel
+0507  FE                		shl
+0508  88                		glo rLoWheel
+0509  76                		shrc
+050A  F4                		add
+050B  52                		str rDataPointer
+050C  0A                		ldn rRoadSectorAdr
+050D  F4                		add							;add road sector -1..-3 or 1..3
+050E  52                		str rDataPointer
+                        		
+050F  9C                		ghi rHiSpeed
+0510  FF 07             		smi SPEED_SKID_START
+0512  3B 22             		bnf skipDecCarX
+0514  F6                		shr
+0515  F6                		shr
+0516  A4                		plo r4buf
+0517  0A                		ldn rRoadSectorAdr
+0518  32 22             		bz skipDecCarX
+051A  FE                		shl
+051B  84                		glo r4buf
+051C  3B 20             		bnf incCarX
+051E  F5                		sd
+051F  38                		skp
+0520                    incCarX:
+0520  F4                		add
+0521  52                		str rDataPointer
+
+0522                    skipDecCarX:
+0522  02                		ldn rDataPointer
+0523                    storeCarX:
+0523  FC 3F             		adi CAR_X_LIMIT				;range check, right limit
+0525  FC 81             		adi 255-CAR_X_LIMIT*2				;last - left limit
+0527  02                		ldn rDataPointer
+0528  3B 31             		bnf saveNewCarX
+052A  FE                		shl
+052B  F8 C1             		ldi -CAR_X_LIMIT
+052D  33 31             		bdf saveNewCarX
+052F  F8 3F             		ldi CAR_X_LIMIT
+0531                    saveNewCarX:
+0531  B8                		phi rHiCarX
+
+
+                        		;shift horizon and calc road curve every fourth frame
+0532  96                		ghi rHiCounter
+0533  F6                		shr
+0534  F6                		shr
+0535  CB 0583           		lbnf shiftHorizon
+
+
+0538                    calcRoad:
+                        		;122 cicles free
+0538  F8 39             		ldi <mData
+053A  A2                		plo rDataPointer		;X to ddx
+                        		
+053B  A5                		plo r5Buf
+053C  92                		ghi rDataPointer
+053D  B5                		phi r5Buf
+
+053E  F8 1C             		ldi <(MAX_SEGMENT_Y+1)
+0540  A7                		plo rScreenYAdr
+                        		
+0541  F8 00             		ldi 0
+0543  73                		stxd 					;ddx = 0; X to dx.0
+0544  73                		stxd 					;dx.0 = 0; X to dx.1
+0545  73                		stxd					;dx.1 = 0; X to mPerspectiveYBuf
+
+0546  22                		dec rDataPointer		;to mPerspectiveY
+0547                    updatePerspectiveY:
+0547  42                		lda rDataPointer
+0548  FF 1B             		smi MAX_SEGMENT_Y
+054A  3B 4F             		bnf incPerspectiveY
+054C                    clearPerspectiveY:
+054C  F8 E4             		ldi -MAX_SEGMENT_Y-1
+054E  1A                		inc rRoadSectorAdr
+054F                    incPerspectiveY:
+054F  FC 1C             		adi MAX_SEGMENT_Y+1
+0551  73                		stxd					;new mPerspectiveY to mPerspectiveYBuf
+0552  73                		stxd					;and to mPerspectiveY
+
+0553                    calcRoadLoop:
+0553  85                		glo r5Buf
+0554  A2                		plo rDataPointer
+0555  0A                		ldn rRoadSectorAdr
+0556  F4                		add
+0557  73                		stxd ;new ddx; X to dx.0
+                        		
+0558  F4                		add
+0559  73                		stxd						;new dx.0; X to dx.1
+055A  FA E0             		ani 0xE0
+055C  57                		str rScreenYAdr
+055D  05                		ldn r5Buf
+055E  FA 80             		ani 0x80
+0560  32 64             		bz $+4
+0562  F8 FF             		ldi 0xFF
+0564  74                		adc
+0565  73                		stxd						;new dx.1; X to mPerspectiveY
+
+0566  FA 0F             		ani 0x0F
+0568  F6                		shr
+0569  E7                		sex rScreenYAdr
+056A  F1                		or
+056B  76                		shrc
+056C  76                		shrc
+056D  76                		shrc
+056E  76                		shrc
+056F  73                		stxd						;save to rScreenYAdr and dec it
+
+0570  E2                		sex rDataPointer
+0571  87                		glo rScreenYAdr
+0572  F7                		sm 						;compare rScreenYAdr with mPerspectiveY
+0573  3A 53             		bnz calcRoadLoop
+
+0575  73                		stxd 	;clear mPerspectiveYBuf
+0576  87                		glo rScreenYAdr
+0577  32 7C             		bz calcRoadExit
+0579  1A                		inc rRoadSectorAdr
+057A  30 53             		br calcRoadLoop
+
+057C                    calcRoadExit:
+057C  F0                		ldx
+057D  32 80             		bz calcRoadEnd
+057F  2A                		dec rRoadSectorAdr
+0580                    calcRoadEnd:
+0580  C0 02F9           		lbr waitVsync; incScoresAndSegment
+
+
+0583                    shiftHorizon:
+0583  92                		ghi rDataPointer
+0584  B5                		phi r5Buf
+0585  0A                		ldn rRoadSectorAdr
+0586  FE                		shl
+0587  33 AD             		bdf shiftRightHorizon
+0589  32 D9             		bz shiftHorizonEnd
+
+058B                    shiftLeftHorizon:
+058B  F8 FF             		ldi <(mBtmHorizonEnd)
+058D  A2                		plo rDataPointer
+
+058E  F8 F8             		ldi <(mBtmHorizonEnd-7)
+0590  A5                		plo r5Buf
+0591                    shiftLeftHorizonLoop:
+0591  05                		ldn r5Buf
+0592  7E                		shlc
+
+0593                    loop:
+0593  F0                		ldx
+0594  7E                		shlc
+0595  73                		stxd
+0596  F0                		ldx
+0597  7E                		shlc
+0598  73                		stxd
+0599  F0                		ldx
+059A  7E                		shlc
+059B  73                		stxd
+059C  F0                		ldx
+059D  7E                		shlc
+059E  73                		stxd
+059F  82                		glo rDataPointer
+05A0  FA 04             		ani 0x04
+05A2  32 93             		bz loop
+
+05A4  85                		glo r5Buf
+05A5  FF 08             		smi 8
+05A7  A5                		plo r5Buf
+
+05A8  FE                		shl
+05A9  33 91             		bdf shiftLeftHorizonLoop
+05AB  30 D9             		br shiftHorizonEnd
+
+05AD                    shiftRightHorizon:
+05AD  F8 80             		ldi <(mBtmHorizonStart)
+05AF  A5                		plo r5Buf
+                        		
+05B0  F8 87             		ldi <(mBtmHorizonStart+7)
+05B2                    shiftRightHorizonLoop:
+05B2  A2                		plo rDataPointer
+05B3  02                		ldn rDataPointer
+05B4  76                		shrc
+
+05B5  05                		ldn r5Buf
+05B6  76                		shrc
+05B7  55                		str r5Buf
+05B8  15                		inc r5Buf
+05B9  05                		ldn r5Buf
+05BA  76                		shrc
+05BB  55                		str r5Buf
+05BC  15                		inc r5Buf
+05BD  05                		ldn r5Buf
+05BE  76                		shrc
+05BF  55                		str r5Buf
+05C0  15                		inc r5Buf
+05C1  05                		ldn r5Buf
+05C2  76                		shrc
+05C3  55                		str r5Buf
+05C4  15                		inc r5Buf
+05C5  05                		ldn r5Buf
+05C6  76                		shrc
+05C7  55                		str r5Buf
+05C8  15                		inc r5Buf
+05C9  05                		ldn r5Buf
+05CA  76                		shrc
+05CB  55                		str r5Buf
+05CC  15                		inc r5Buf
+05CD  05                		ldn r5Buf
+05CE  76                		shrc
+05CF  55                		str r5Buf
+05D0  15                		inc r5Buf
+05D1  45                		lda r5Buf
+05D2  76                		shrc
+05D3  52                		str rDataPointer
+
+05D4  82                		glo rDataPointer
+05D5  FC 08             		adi 8
+05D7  3B B2             		bnf shiftRightHorizonLoop
+05D9                    shiftHorizonEnd:
+
+05D9                    incStores:
+05D9  F8 48             		ldi <(mScoreLow+1)
+05DB  A2                		plo rDataPointer
+05DC  F0                		ldx
+05DD                    incStoresLoop:
+05DD  73                		stxd
+05DE  F8 01             		ldi 1
+05E0  F4                		add
+05E1  52                		str rDataPointer
+05E2  FF 0A             		smi 10
+05E4  33 DD             		bdf incStoresLoop
+                        		
+05E6                    drawScore:
+05E6  F8 46             		ldi <(mScoreSpace+4)
+05E8  A2                		plo rDataPointer
+05E9  F8 40             		ldi <(digitsPos+4+2)
+05EB  A3                		plo r3Buf
+05EC  C0 01B3           		lbr drawString
+
+
+
+0600                    		.org $600
+0600                    selectGlobalState:
+0600  FF 03             		smi 3
+0602  3B 11             		bnf prepareLevelStep	  ;state = 1-2
+0604  FF 08             		smi 8
+0606  3B 6A             		bnf globalStateCountDown  ;state = 3-10
+0608  32 5D             		bz startRace			  ;state = 11
+060A  FF 01             		smi 1
+060C  32 B4             		bz finishRoad			  ;state = 12
+                        	
+                        		;state other
+060E                    gameOver:						
+060E  C0 02F9           		lbr waitVsync
+                        		
+
+0611                    prepareLevelStep:
+0611  1F                		inc rGlobalState
+
+0612  FC 01             		adi 1
+0614  C2 01F9           		lbz drawRoad 			; if state = 2
+
+                        		;put zeros
+0617  F8 00             		ldi 0
+0619  B8                		phi rHiCarX
+061A  A8                		plo rLoWheel
+061B  AC                		plo rloSpeedCounter
+061C  BC                		phi rHiSpeed
+
+061D                    loadHorizon:
+061D  4A                		lda rRoadSectorAdr
+061E  B5                		phi r5Buf
+061F  4A                		lda rRoadSectorAdr
+0620  A5                		plo r5Buf
+0621  F8 34             		ldi <mRoadStartAdr
+0623  A2                		plo rDataPointer
+0624  4A                		lda rRoadSectorAdr
+0625  73                		stxd
+0626  4A                		lda rRoadSectorAdr
+0627  73                		stxd
+                        		
+0628  F8 FF             		ldi <mBtmHorizonEnd
+062A  A2                		plo rDataPointer
+062B                    loadHorizonLoop:
+062B  45                		lda r5Buf
+062C  73                		stxd
+062D  3A 3A             		bnz notZero
+                        		;simple comress: if 0 then read next byte for get zeros count
+062F  45                		lda r5Buf
+0630  32 3A             		bz notZero
+0632  A4                		plo r4buf
+0633                    storeZeros:
+0633  F8 00             		ldi 0
+0635  73                		stxd
+0636  24                		dec r4buf
+0637  84                		glo r4buf
+0638  3A 33             		bnz storeZeros
+063A                    notZero:
+063A  82                		glo rDataPointer
+063B  FE                		shl
+063C  33 2B             		bdf loadHorizonLoop
+                        		
+063E  F8 35             		ldi <mPerspectiveY
+0640  A2                		plo rDataPointer
+0641  F8 11             		ldi START_PERSPECTIVE_Y
+0643  73                		stxd
+
+0644                    initTopInfo:
+0644  F8 42             		ldi <mScoreSpace
+0646  A2                		plo rDataPointer
+0647  F8 0A             		ldi <chr_
+0649  73                		stxd
+064A  73                		stxd
+064B  F8 00             		ldi <chr0+<TIMER_START_LO
+064D  73                		stxd
+064E  F8 09             		ldi <chr0+<TIMER_START_HI
+0650  73                		stxd
+0651  F8 0A             		ldi <chr_
+0653  73                		stxd
+0654  73                		stxd
+0655  F8 00             		ldi <chr0
+0657  73                		stxd
+0658  73                		stxd
+0659  73                		stxd
+                        		;todo: need more cicles
+065A  C0 02F9           		lbr waitVsync
+
+                        		
+065D                    startRace:
+                        		;put zeros
+065D  AF                		plo rGlobalState
+065E  B6                		phi rHiCounter
+065F  C0 01F9           		lbr drawRoad
+
+
+      = 0005            rRowAdr = r5Buf
+0662                    clearLight:
+0662  F8 00             		ldi 0
+0664  73                		stxd
+0665  85                		glo rRowAdr
+0666  3A 62             		bnz clearLight
+0668  30 B1             		br globalStateCountDownEnd
+                        		
+066A                    globalStateCountDown:
+
+                        		;every 0.75s
+066A  86                		glo rLoTimer
+066B  FC D0             		adi 208
+066D  CB 01AD           		lbnf drawSpeedAndTimer
+0670  86                		glo rLoTimer
+0671  FA 0F             		ani 0x0F
+0673  A6                		plo rLoTimer
+
+0674  F8 09             		ldi >(RAM+256)
+0676  B5                		phi rRowAdr
+0677  F8 65             		ldi LIGHT_POSITION_Y
+0679  A5                		plo rRowAdr	
+067A  E5                		sex rRowAdr
+
+067B  1F                		inc rGlobalState
+067C  8F                		glo rGlobalState
+067D  FF 0B             		smi 11
+067F  32 62             		bz clearLight
+0681  FE                		shl
+0682  FE                		shl
+0683  FC EC             		adi <btmLight0
+0685  A4                		plo r4Buf
+
+0686  F8 06             		ldi >btmLightTop
+0688  B3                		phi r3Buf
+0689  F8 BC             		ldi <btmLightTop
+068B  A3                		plo r3Buf
+
+068C                    drawLight:
+068C  43                		lda r3Buf
+068D  73                		stxd
+068E  43                		lda r3Buf
+068F  73                		stxd
+0690  43                		lda r3Buf
+0691  73                		stxd		
+0692  43                		lda r3Buf
+0693  73                		stxd
+0694  85                		glo rRowAdr
+0695  FF 04             		smi 4
+0697  A5                		plo rRowAdr
+0698  FC AB             		adi (8*2+256-LIGHT_POSITION_Y)
+069A  33 8C             		bdf drawLight
+069C  FC 18             		adi (8*3)
+069E  3B A4             		bnf drawLightBottom
+06A0  84                		glo r4Buf
+06A1  A3                		plo r3Buf
+06A2  30 8C             		br drawLight
+06A4                    drawLightBottom:
+06A4  FC 08             		adi (8*1)
+06A6  3B AD             		bnf drawLightEnd		
+06A8  F8 C4             		ldi <btmLightBottom
+06AA  A3                		plo r3Buf
+06AB  30 8C             		br drawLight
+06AD                    drawLightEnd:
+06AD  FC 10             		adi (8*2)
+06AF  33 8C             		bdf drawLight
+                        		
+06B1                    globalStateCountDownEnd:
+06B1  C0 02F9           		lbr waitVsync
+                        		
+
+06B4                    finishRoad:
+06B4  1A                		inc rRoadSectorAdr
+06B5  1A                		inc rRoadSectorAdr
+06B6  F8 01             		ldi 1
+06B8  AF                		plo rGlobalState
+06B9  C0 02F9           		lbr waitVsync
+
+06BC                    btmLightTop:
+06BC  FEFFFF7F          		.db 11111110b, 11111111b, 11111111b, 01111111b
+06C0  01000080          		.db 00000001b, 00000000b, 00000000b, 10000000b
+06C4                    btmLightBottom:
+06C4  19866198          		.db 00011001b, 10000110b, 01100001b, 10011000b
+06C8  01000080          		.db 00000001b, 00000000b, 00000000b, 10000000b
+06CC  FEFFFF7F          		.db 11111110b, 11111111b, 11111111b, 01111111b
+                        	
+06D0  254992A4          		.db 00100101b, 01001001b, 10010010b, 10100100b	
+06D4  254992BC          		.db 00100101b, 01001001b, 10010010b, 10111100b
+06D8  2549F2BC          		.db 00100101b, 01001001b, 11110010b, 10111100b
+06DC  25C9F3BC          		.db 00100101b, 11001001b, 11110011b, 10111100b
+06E0  25CFF3BC          		.db 00100101b, 11001111b, 11110011b, 10111100b
+06E4  3DCFF3BC          		.db 00111101b, 11001111b, 11110011b, 10111100b
+06E8  254992A4          		.db 00100101b, 01001001b, 10010010b, 10100100b	
+06EC                    btmLight0:
+                        		
+0700                    		.org $700
+0700                    pixelData:
+0700  07800740 07200710 		.db 7,0x80, 7,0x40, 7,0x20, 7,0x10, 7,0x08, 7,0x04, 7,0x02, 7,0x01
+0708  07080704 07020701
+0710  06800640 06200610 		.db 6,0x80, 6,0x40, 6,0x20, 6,0x10, 6,0x08, 6,0x04, 6,0x02, 6,0x01
+0718  06080604 06020601
+0720  05800540 05200510 		.db 5,0x80, 5,0x40, 5,0x20, 5,0x10, 5,0x08, 5,0x04, 5,0x02, 5,0x01
+0728  05080504 05020501
+0730  04800440 04200410 		.db 4,0x80, 4,0x40, 4,0x20, 4,0x10, 4,0x08, 4,0x04, 4,0x02, 4,0x01
+0738  04080404 04020401
+0740  03800340 03200310 		.db 3,0x80, 3,0x40, 3,0x20, 3,0x10, 3,0x08, 3,0x04, 3,0x02, 3,0x01
+0748  03080304 03020301
+0750  02800240 02200210 		.db 2,0x80, 2,0x40, 2,0x20, 2,0x10, 2,0x08, 2,0x04, 2,0x02, 2,0x01
+0758  02080204 02020201
+0760  01800140 01200110 		.db 1,0x80, 1,0x40, 1,0x20, 1,0x10, 1,0x08, 1,0x04, 1,0x02, 1,0x01
+0768  01080104 01020101
+0770  00800040 00200010 		.db 0,0x80, 0,0x40, 0,0x20, 0,0x10, 0,0x08, 0,0x04, 0,0x02, 0,0x01
+0778  00080004 00020001
+0780                    zero128b:
+0780  00000000 00000000 		.ds 128, 0		  ;for out of screen
+0788  00000000 00000000
+0790  00000000 00000000
+0798  00000000 00000000
+07A0  00000000 00000000
+07A8  00000000 00000000
+07B0  00000000 00000000
+07B8  00000000 00000000
+07C0  00000000 00000000
+07C8  00000000 00000000
+07D0  00000000 00000000
+07D8  00000000 00000000
+07E0  00000000 00000000
+07E8  00000000 00000000
+07F0  00000000 00000000
+07F8  00000000 00000000
+
+
+                        		;RAM
+                        		;.org 800
+                        		;.org 900
+                        		;.org a00 - blocked for multicart
+                        		;.org b00 - blocked for multicart
+
+0C00                    		.org $C00
+0C00  29131F25 2A21192D chr0:	.db <btm0, <btm1, <btm2, <btm3, <btm4, <btm5, <btm6, <btm7, <btm8, <btm9
+0C08  1B1D
+0C0A  0E                chr_:	.db <btm_
+0C0B  32                chrR:	.db <btmR
+0C0C  17                chrE:	.db <btmE
+0C0D  35                chrV:	.db <btmV ;5 zeros for space
+
+0C0E  00000000 00       btm_:	.db 0,0,0,0,0
+0C13  CC                btm1:	.db 11001100b
+0C14  44                		.db 01000100b
+0C15  44                		.db 01000100b
+0C16  44                		.db 01000100b
+0C17  EE                btmE:	.db 11101110b
+0C18  88                		.db 10001000b
+0C19  EE                btm6:	.db 11101110b
+0C1A  88                		.db 10001000b
+0C1B  EE                btm8:	.db 11101110b
+0C1C  AA                		.db 10101010b
+0C1D  EE                btm9:	.db 11101110b
+0C1E  AA                		.db 10101010b
+0C1F  EE                btm2:	.db 11101110b
+0C20  22                		.db 00100010b
+0C21  EE                btm5:	.db 11101110b
+0C22  88                		.db 10001000b
+0C23  EE                		.db 11101110b
+0C24  22                		.db 00100010b
+0C25  EE                btm3:	.db 11101110b
+0C26  22                		.db 00100010b
+0C27  66                		.db 01100110b
+0C28  22                		.db 00100010b
+0C29                    btmO:
+0C29  EE                btm0:	.db 11101110b
+0C2A  AA                btm4:	.db 10101010b
+0C2B  AA                		.db 10101010b
+0C2C  AA                		.db 10101010b
+0C2D  EE                btm7:	.db 11101110b
+0C2E  22                		.db 00100010b
+0C2F  44                		.db 01000100b
+0C30  44                		.db 01000100b
+0C31  44                		.db 01000100b
+
+0C32  CC                btmR:	.db 11001100b
+0C33  AA                		.db 10101010b
+0C34  CC                		.db 11001100b
+0C35  AA                btmV:	.db 10101010b
+0C36  AA                		.db 10101010b
+0C37  AA                		.db 10101010b
+0C38  AA                		.db 10101010b
+0C39  44                		.db 01000100b
+
+0C3A                    digitsPos:
+0C3A  58595B5C 5D5E5F00 		.db <mBtmDigits,<mBtmDigits+1,<mBtmDigits+3,<mBtmDigits+4,<mBtmDigits+5,<mBtmDigits+6,<mBtmDigits+7, 0
+
+0C42                    btmCarCenter:
+0C42  C45C3A            		.db 196, 01011100b,00111010b
+0C45  CCFC3F            		.db 204, 11111100b,00111111b
+0C48  D40C3000          		.db 212, 00001100b,00110000b, 0
+0C4C                    btmCarLeft:
+0C4C  C47872            		.db 196, 01111000b,01110010b
+0C4F  CCF87F            		.db 204, 11111000b,01111111b
+0C52  D4087000          		.db 212, 00001000b,01110000b, 0
+0C56                    btmCarRight:
+0C56  C44E1E            		.db 196, 01001110b,00011110b
+0C59  CCFE1F            		.db 204, 11111110b,00011111b
+0C5C  D40E10            		.db 212, 00001110b,00010000b
+0C5F                    btmCar:
+0C5F  BC8001            		.db 188, 10000000b,00000001b
+0C62  DCBFFD            		.db 220, 10111111b,11111101b
+0C65  E4FFFF            		.db 228, 11111111b,11111111b
+0C68  EC5FFA            		.db 236, 01011111b,11111010b
+0C6B  F4EFF7            		.db 244, 11101111b,11110111b
+0C6E  FC0FF000          		.db 252, 00001111b,11110000b, 0
+                        			
+0C72                    btmTopText:
+0C72  6CEEC075 5C06EECE 		.db 01101100b, 11101110b, 11000000b, 01110101b, 01011100b, 00000110b, 11101110b, 11001110b
+0C7A  8A88A025 D0088AA8 		.db 10001010b, 10001000b, 10100000b, 00100101b, 11010000b, 00001000b, 10001010b, 10101000b
+0C82  6ACCA025 58068AAC 		.db 01101010b, 11001100b, 10100000b, 00100101b, 01011000b, 00000110b, 10001010b, 10101100b
+0C8A  2C88A025 50028AC8 		.db 00101100b, 10001000b, 10100000b, 00100101b, 01010000b, 00000010b, 10001010b, 11001000b
+0C92  C8EEC025 5C0CEEAE 		.db 11001000b, 11101110b, 11000000b, 00100101b, 01011100b, 00001100b, 11101110b, 10101110b
+
+                        		
+0D00                    		.org $D00	
+
+0D00                    marksWidthY:
+                        		; 1 - pixel offset from center *2 ; 2 - modifier for pixelData table 65 41 17 1
+0D00  10070018 17000024 m1: 	.db 16,7,00000,24,23,00000,00000,36,47,00000,00000,00000,52,79,56,87,00000,000000,68,111,72,119,76,127,000000,000000,000000,000000,96,167,100,175,104,183,108,191,112,199, 57, <m1, <m2
+0D08  2F000000 344F3857
+0D10  0000446F 48774C7F
+0D18  00000000 60A764AF
+0D20  68B76CBF 70C73900
+0D28  29
+0D29  10070018 17000000 m2: 	.db 16,7,00000,24,23,00000,00000,00000,40,55,00000,00000,00000,56,87,60,95,000000,000000,000000,76,127,80,135,84,143,000000,000000,000000,0000000,0,108,191,112,199,116,207,120,215, 41, <m2, <m3
+0D31  28370000 0038573C
+0D39  5F000000 4C7F5087
+0D41  548F0000 0000006C
+0D49  BF70C774 CF78D729
+0D51  2953
+0D53  10070000 1C1F0000 m3: 	.db 16,7,00000,00000,28,31,00000,00000,00000,44,63,00000,00000,00000,60,95,64,103,000000,000000,000000,000000,84,143,88,151,92,159,000000,0000000,0,0,0,0,120,215,124,223,128,231,132,239, 17, <m3, <m4
+0D5B  002C3F00 00003C5F
+0D63  40670000 0000548F
+0D6B  58975C9F 00000000
+0D73  000078D7 7CDF80E7
+0D7B  84EF1153 80
+0D80  1007140F 00002027 m4: 	.db 16,7,20,15,00000,00000,32,39,00000,00000,00000,48,71,00000,00000,00000,64,103,68,111,000000,000000,000000,000000,000000,92,159,96,167,0000000,0,0,0,0,0,0,0,132,239,136,247,140,255, 1, <m4, <m1
+0D88  00000030 47000000
+0D90  4067446F 00000000
+0D98  005C9F60 A7000000
+0DA0  00000000 0084EF88
+0DA8  F78CFF01 8000
+
+
+0DAE                    roadData1:
+0DAE  0E5AB21D          		.db >btmMountains, <btmMountains, <startRoad1, <(finishRoad1-startRoad1)
+0DB2                    startRoad1:
+0DB2  00000000 0202FEFE 		.db 0, 0, 0, 0, 2, 2,-2,-2, 0, 0, 0, 2, 3, 2, 0,-3,-3, 0, 0, 0, 1, 1, 0, 2, 2, 0, 1, 0, 0
+0DBA  00000002 030200FD
+0DC2  FD000000 01010002
+0DCA  02000100 00
+0DCF                    finishRoad1:
+0DCF  0000              		.db 0, 0
+
+0DD1                    roadData2:
+0DD1  0E00D51D          		.db >btmFudji, <btmFudji, <startRoad2, <(finishRoad2-startRoad2)
+0DD5                    startRoad2:
+0DD5  00000000 00000202 		.db 0, 0, 0, 0, 0, 0, 2, 2, 0, 3,-3, 0, 0, 2,-2, 1,-1, 0, 0,-2,-1, 0, 0, 1, 1, 2, 2, 0, 0
+0DDD  0003FD00 0002FE01
+0DE5  FF0000FE FF000001
+0DED  01020200 00
+0DF2                    finishRoad2:
+0DF2  0000              		.db 0, 0
+
+0E00                    		.org $E00
+0E00                    btmFudji:
+0E00  04103444 23480241 		.db 0x04, 0x10, 0x34, 0x44, 0x23, 0x48, 0x02, 0x41
+0E08  222148AA 54249190 		.db 0x22, 0x21, 0x48, 0xaa, 0x54, 0x24, 0x91, 0x90
+0E10  F7529511 8882FBF9 		.db 0xf7, 0x52, 0x95, 0x11, 0x88, 0x82, 0xfb, 0xf9
+0E18  7D8D2282 44C5FFFF 		.db 0x7d, 0x8d, 0x22, 0x82, 0x44, 0xc5, 0xff, 0xff
+0E20  B8024044 22A8F79D 		.db 0xb8, 0x02, 0x40, 0x44, 0x22, 0xa8, 0xf7, 0x9d
+0E28  10018010 1010E308 		.db 0x10, 0x01, 0x80, 0x10, 0x10, 0x10, 0xe3, 0x08
+0E30  0002CD08 00004000 		.db 0x00, 0x02, 0xcd, 0x08, 0x00, 0x00, 0x40, 0x00
+0E38  03EB0D00 05DE0600 		.db 0x03, 0xeb, 0x0d, 0x00, 0x05, 0xde, 0x06, 0x00
+0E40  05FC0200 057C0300 		.db 0x05, 0xfc, 0x02, 0x00, 0x05, 0x7c, 0x03, 0x00
+0E48  05F80100 05F80100 		.db 0x05, 0xf8, 0x01, 0x00, 0x05, 0xf8, 0x01, 0x00
+0E50  05F00006 F00006F0 		.db 0x05, 0xf0, 0x00, 0x06, 0xf0, 0x00, 0x06, 0xf0
+0E58  0003              		.db 0x00, 0x03
+0E5A                    btmMountains:
+0E5A  010006            		.db 0x01,0x00,0x06
+0E5D  03000580          		.db 0x03,0x00,0x05,0x80
+0E61  070005C0          		.db 0x07,0x00,0x05,0xC0
+0E65  0F0005E0          		.db 0x0F,0x00,0x05,0xE0
+0E69  1F0005F0          		.db 0x1F,0x00,0x05,0xF0
+0E6D  3F000102 0002F8   		.db 0x3F,0x00,0x01,0x02,0x00,0x02,0xF8
+0E74  7F00010F 0002FC   		.db 0x7F,0x00,0x01,0x0F,0x00,0x02,0xFC
+0E7B  FF000080 3F000101 		.db 0xFF,0x00,0x00,0x80,0x3F,0x00,0x01,0x01,0xFE
+0E83  FE
+0E84  FF01C0FF 0000C003 		.db 0xFF,0x01,0xC0,0xFF,0x00,0x00,0xC0,0x03,0xF9
+0E8C  F9
+0E8D  FF03E0FF 03F087F0 		.db 0xFF,0x03,0xE0,0xFF,0x03,0xF0,0x87,0xF0
+0E95  FF04F0FF 0FFC4BE0 		.db 0xFF,0x04,0xF0,0xFF,0x0F,0xFC,0x4B,0xE0
+0E9D  3F08F8FF 37F331C0 		.db 0x3F,0x08,0xF8,0xFF,0x37,0xF3,0x31,0xC0
+0EA5  0F10E4FF C1E00000 		.db 0x0F,0x10,0xE4,0xFF,0xC1,0xE0,0x00,0x00,0x80
+0EAD  80
+0EAE  0320827F 00004000 		.db 0x03,0x20,0x82,0x7F,0x00,0x00,0x40,0x00,0x02
+0EB6  02
+0EB7  40011E00 04       		.db 0x40,0x01,0x1E,0x00,0x04
+0EBC  800005            		.db 0x80,0x00,0x05
+
+
+
+0F00                    		.org $F00
+
+0F00                    menuWaitVsync:					;wait 1861 interrupt
+0F00  E1                		sex r1
+0F01  70                		ret
+0F02  21                		.db  $21
+0F03  00                		idl
+0F04  C4                		nop
+0F05                    menuDisplayRefresh:
+0F05  F8 3D             		ldi <btmCaption
+0F07  A0                		plo r0
+0F08  F8 0F             		ldi >btmCaption
+0F0A  B0                		phi r0
+
+0F0B  F8 1E             		ldi 30
+0F0D  A3                		plo r3Buf
+0F0E                    menuDisplayWait0:
+0F0E  E2                		sex rDataPointer
+0F0F  F8 3D             		ldi <btmCaption
+0F11  A0                		plo r0
+0F12  23                		dec r3Buf
+0F13  83                		glo r3Buf
+0F14  3A 0E             		bnz menuDisplayWait0
+
+0F16                    menuDisplayWait1:
+0F16  80                		glo r0
+0F17  FF 85             		smi <(btmCaptionEnd-8)
+0F19  3B 16             		bnf menuDisplayWait1
+
+0F1B  F8 1E             		ldi 30
+0F1D  A3                		plo r3Buf
+0F1E                    menuDisplayWait2:
+0F1E  E2                		sex rDataPointer
+0F1F  F8 3D             		ldi <btmCaption
+0F21  A0                		plo r0
+0F22  23                		dec r3Buf
+0F23  83                		glo r3Buf
+0F24  3A 1E             		bnz menuDisplayWait2
+
+0F26  F8 08             		ldi >RAM
+0F28  B2                		phi rDataPointer
+0F29  F8 39             		ldi <mData
+0F2B  A2                		plo rDataPointer
+0F2C  F8 0A             		ldi 10
+0F2E                    menuReadAnyKey:
+0F2E  FF 01             		smi 1
+0F30  52                		str rDataPointer
+0F31  62                		out 2
+0F32  37 3A             		b4 menuExit
+0F34  22                		dec rDataPointer
+0F35  F0                		ldx
+0F36  3A 2E             		bnz menuReadAnyKey
+
+
+0F38  30 00             		br menuWaitVsync
+
+0F3A                    menuExit:
+0F3A  C0 02F9           		lbr waitVsync
+
+0F3D                    btmCaption:
+0F3D  00000000 00000000 		.db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+0F45  00000000 00000000
+0F4D  00F7D93C 1E79E780 		.db 0x00, 0xf7, 0xd9, 0x3c, 0x1e, 0x79, 0xe7, 0x80
+0F55  0190D964 32CB2C80 		.db 0x01, 0x90, 0xd9, 0x64, 0x32, 0xcb, 0x2c, 0x80
+0F5D  01919964 02D82D80 		.db 0x01, 0x91, 0x99, 0x64, 0x02, 0xd8, 0x2d, 0x80
+0F65  01F30E7C 3EEBEE80 		.db 0x01, 0xf3, 0x0e, 0x7c, 0x3e, 0xeb, 0xee, 0x80
+0F6D  01960664 30CB0C80 		.db 0x01, 0x96, 0x06, 0x64, 0x30, 0xcb, 0x0c, 0x80
+0F75  01960665 30CB0C80 		.db 0x01, 0x96, 0x06, 0x65, 0x30, 0xcb, 0x0c, 0x80
+0F7D  0197C665 3EFBEF80 		.db 0x01, 0x97, 0xc6, 0x65, 0x3e, 0xfb, 0xef, 0x80
+0F85  00000002 00000000 		.db 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00
+0F8D                    btmCaptionEnd:
+0F8D  00000000 00000000 		.db 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+0F95  00000000 00000000
+0FFF                    		.org 0xfff
+0FFF  FF                		.db 0xff
+1000                    		.end
+
+                        		
+
+00000 Total Error(s)
+
+BANDTABLE          0425    BTM0               0C29    BTM1               0C13
+BTM2               0C1F    BTM3               0C25    BTM4               0C2A
+BTM5               0C21    BTM6               0C19    BTM7               0C2D
+BTM8               0C1B    BTM9               0C1D    BTMCAPTION         0F3D
+BTMCAPTIONEND      0F8D    BTMCAR             0C5F    BTMCARCENTER       0C42
+BTMCARLEFT         0C4C    BTMCARRIGHT        0C56    BTME               0C17
+BTMFUDJI           0E00    BTMLIGHT0          06EC    BTMLIGHTBOTTOM     06C4
+BTMLIGHTTOP        06BC    BTMMOUNTAINS       0E5A    BTMO               0C29
+BTMR               0C32    BTMTOPTEXT         0C72    BTMV               0C35
+BTM_               0C0E    CALCROAD           0538    CALCROADEND        0580
+CALCROADEXIT       057C    CALCROADLOOP       0553    
+CALCROADORSHIFTHORIZON                        0500    CAR_X_LIMIT        003F E
+CHANGESPEEDEND     0185    CHECKGLOBALSTATE   0361    CHECKTURN          0159
+CHR0               0C00    CHRE               0C0C    CHRR               0C0B
+CHRV               0C0D    CHR_               0C0A    CIBAND             040F
+CICELL             0414    CLEARLIGHT         0662    CLEARPERSPECTIVEY  054C
+CLEARRAM           010C    CLEARRAMLOOP       010E    CLEARROAD          0200
+CLEARROADLOOP      0204    CLEARROADSKIPZEROLOOP                         0201
+COLOURINIT         0400    DECRKEY            0399    DECSPEED           0166
+DECSPEEDCOUNTER    036B    DECSPEEDNEXT       016B    DEC_SPEED_ROADSIDE 0004 E
+DIGITSPOS          0C3A    DISPLAYREFRESH     0300    DISPLAYTEST        0356
+DISPLAYTEST2       0358    DISPLAYWAIT0       0306    DISPLAYWAIT1       032A
+DISPLAYWAIT2       0335    DISPLAYWAIT3       033E    DISPLAYWAIT4       0346
+DISPLAYWAIT5       0351    DISPLAYWAIT6       0359    DRAWCAR            02BA
+DRAWCARCENTER      02CC    DRAWCARLEFT        02CE    DRAWCARLOOP        02DE
+DRAWCARRIGHT       02DC    DRAWCARTOPLOOP     02D0    DRAWD              022A
+DRAWFINISHLINE     0295    DRAWFINISHLINELOOP 02A4    DRAWFINISHONELINE  02AC
+DRAWI              0257    DRAWIFMARKD        0239    DRAWIFMARKI        0262
+DRAWLIGHT          068C    DRAWLIGHTBOTTOM    06A4    DRAWLIGHTEND       06AD
+DRAWLOOPD          0232    DRAWLOOPI          025B    DRAWPREVIOUS       021C
+DRAWROAD           01F9    DRAWROADEND        027E    DRAWSCORE          05E6
+DRAWSPEEDANDTIMER  01AD    DRAWSTRING         01B3    DRAWSTRINGMAINLOOP 01BA
+DRAWTWOCHARSLOOP   01C3    FINISHROAD         06B4    FINISHROAD1        0DCF
+FINISHROAD2        0DF2    FIXTIMER           0318    GAMEOVER           060E
+GLOBALSTATECOUNTDOWN                          066A    
+GLOBALSTATECOUNTDOWNEND                       06B1    INCCARX            0520
+INCPERSPECTIVEY    054F    INCRKEY            0397    INCSPEED           0176
+INCSPEEDCOUNTER    0374    INCSPEEDLOOP       017E    INCSTORES          05D9
+INCSTORESLOOP      05DD    INCTIMER           0319    INITTOPINFO        0644
+LESSCALLEDATHIGHERSPEED                       0375    LIGHT_POSITION_Y   0065 E
+LOADHORIZON        061D    LOADHORIZONLOOP    062B    LOOP               0593
+M1                 0D00    M2                 0D29    M3                 0D53
+M4                 0D80    MAIN               0361    MARKSWIDTHY        0D00
+MAX_SEGMENT_Y      001B E  MAX_SPEED          0017 E  MAX_SPEED_ROADSIDE 000B E
+MBTMDIGITS         0858 E  MBTMHORIZONEND     08FF E  MBTMHORIZONSTART   0880 E
+MDATA              0039 E  MENUDISPLAYREFRESH 0F05    MENUDISPLAYWAIT0   0F0E
+MENUDISPLAYWAIT1   0F16    MENUDISPLAYWAIT2   0F1E    MENUEXIT           0F3A
+MENUREADANYKEY     0F2E    MENUWAITVSYNC      0F00    
+MORECALLEDATHIGHERSPEED                       0378    MPERSPECTIVEY      0035 E
+MROADSIZE          0033 E  MROADSTARTADR      0034 E  MSCOREHI           0043 E
+MSCORELOW          0047 E  MSCORESPACE        0042 E  MSPEEDHI           003A E
+MSPEEDLO           003C E  MSPEEDSPACE        003D E  MTIMERHI           003F E
+MTIMERHISPACE      003E E  MTIMERLOW          0040 E  MTIMERLOWSPACE     0041 E
+NOKEY              0391    NONEEDDECSPEED     0164    NOTBREAK           0136
+NOTZERO            063A    PIXELDATA          0700    PREPARELEVELSTEP   0611
+R0                 0000 E  R1                 0001 E  R14H_PIXELDATA     0003 E
+R15H_PIXELDATA     0004 E  R2                 0002 E  R3                 0003 E
+R3BUF              0003 E  R4                 0004 E  R4BUF              0004 E
+R5                 0005 E  R5BUF              0005 E  R6                 0006 E
+R7                 0007 E  R8                 0008 E  R9                 0009 E
+RA                 000A E  RAM                0800 E  RAMSTACK           08BF E
+RB                 000B E  RC                 000C E  RD                 000D E
+RDATAPOINTER       0002 E  RE                 000E E  RESET              0000
+RESETSPEEDCOUNTER  036E    RF                 000F E  RGLOBALSTATE       000F E
+RHICARX            0008 E  RHICOUNTER         0006 E  RHIDELTAX          0009 E
+RHISPEED           000C E  RLODXCORR          0009 E  RLOSPEEDCOUNTER    000C E
+RLOTIMER           0006 E  RLOWHEEL           0008 E  RMARKSWIDTHY       000B E
+ROADDATA1          0DAE    ROADDATA2          0DD1    ROAD_LIMIT         0037 E
+RROADSECTORADR     000A E  RROWADR            0005 E  RSCREENYADR        0007 E
+SAVENEWCARX        0531    SCANACCELKEY       012C    SCANTURNKEY        0380
+SCANTURNKEYEND     039C    SELECTGLOBALSTATE  0600    SHIFTHORIZON       0583
+SHIFTHORIZONEND    05D9    SHIFTLEFTHORIZON   058B    
+SHIFTLEFTHORIZONLOOP                          0591    SHIFTRIGHTHORIZON  05AD
+SHIFTRIGHTHORIZONLOOP                         05B2    SKIPDECCARX        0522
+SPEED_SKID_START   0007 E  START              0100    STARTRACE          065D
+STARTROAD1         0DB2    STARTROAD2         0DD5    
+START_PERSPECTIVE_Y                           0011 E  STORECARX          0523
+STOREZEROS         0633    TIMER_START_HI     0009 E  TIMER_START_LO     0000 E
+UPDATECARX         0500    UPDATEDELTAXANDDXCORR                         021E
+UPDATEPERSPECTIVEY 0547    UPDATESPEED        0365    UPDATETIMER        0312
+UPDATETIMERBTM     0185    UPDATETIMERBTMDEC  01AA    UPDATETIMERBTMEND  01AD
+VIDEOINT           0014    WAITVSYNC          02F9    WHEEL_LIMIT        0008 E
+WHEEL_LIMIT_SPEEDUP                           0004 E  ZERO128B           0780
+_LOOP              0021    _RETURN            0012
