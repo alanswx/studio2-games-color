@@ -53,8 +53,32 @@ fixed screen bands. It is why a plain 8-band table still reads as deliberate: th
 perspective road markers gradient red -> magenta -> green -> yellow -> white
 toward the viewer for free, because their data sits at ascending ROM addresses.
 
-A more considered colouring would pick values per graphic's ROM address rather
-than by screen region. That is the obvious next step and has not been done.
+### Why groups 2, 3 and 4 share a colour
+
+Not a preference — the geometry forces it. Traced with `DMA_TRACE`, the display
+rows land in colour groups like this:
+
+| display rows | what | groups |
+| --- | --- | --- |
+| 0-4 | `SPEED TIME SCORE` header | 3 on row 0, 4 below |
+| 8-15 | the digit line | 2 on row 8, 3 below |
+| 44-59 | mountains | 4, 5, 6, 7 (4 rows each) |
+| 59-66 | the big `AZYA,2020` line | 2, then 3, then 4 |
+| 64-127 | road and car | 0-7, 8 rows each |
+
+Every text string on the game straddles a group boundary, so giving 2, 3 and 4
+different values bands all three of them. The first version did exactly that,
+which is why the score digits had a green top row on a yellow body.
+
+White is the value to unify on because group 4 also draws the mountain tops at
+rows 44-47 — the same choice that makes the text legible caps the peaks with
+snow. Groups 5-7 keep cyan/red/magenta for the lower slopes and, further down
+the screen, for the near road and the car; groups 0 and 1 are the far road alone.
+
+Value 2 is blue, identical to the background, so it is never usable here.
+
+Colouring per graphic rather than per band would need the table indexed by each
+element's own ROM address; that has not been done.
 
 `colourInit` sits at `$0400`, which is `$FF` filler in the original image, and
 ends with `lbr start`. It disables interrupts first (`sex r3 / dis / $23`),

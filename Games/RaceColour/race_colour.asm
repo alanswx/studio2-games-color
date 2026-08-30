@@ -810,7 +810,24 @@ ciCell:
 		bnz ciBand
 		lbr start
 
-bandTable:	.db 1,3,4,5,6,7,1,3		;red magenta green yellow cyan white red magenta
+bandTable:	.db 1,3,7,7,7,6,1,3		;red magenta white white white cyan red magenta
+;
+;  Groups 2, 3 and 4 have to share a colour, and that is not a preference.
+;  Text on this game straddles them: the status header is display rows 0-4,
+;  which is group 3 on row 0 and group 4 below it; the digit line is rows
+;  8-15, group 2 on row 8 and group 3 below; and the big AZYA,2020 line is
+;  rows 59-66, crossing group 2 into 3 into 4. Give those groups different
+;  values and every one of those strings comes out banded -- which is what
+;  the first version did, and why the score digits had a green top row on a
+;  yellow body.
+;
+;  White is the pick because group 4 also draws the mountain tops at rows
+;  44-47, so the same value that makes the text legible caps the peaks with
+;  snow. Groups 5, 6 and 7 keep cyan/red/magenta for the lower slopes and,
+;  further down the screen, for the near road and the car. Groups 0 and 1
+;  are the far road alone.
+;
+;  Value 2 is blue, the same as the background, so it is never usable here.
 
 		.org $500
 calcRoadOrShiftHorizon:
