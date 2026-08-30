@@ -146,11 +146,11 @@
 0831  FB 07             		xri 	7
 0833  32 2A             		bz 		DRM_WriteF8
 0835  F8 FF             		ldi 	$FF
-0837                    DRM_Write: 													; write and fill whole screen
-0837  5F                		str 	rf
-0838  1F                		inc 	rf
-0839  8F                		glo 	rf
-083A  3A 08             		bnz 	DRM_ClearScreen
+0837                    DRM_Write: 													; COLOUR: this now writes BOTH planes -- see DRM_WriteBoth. It
+0837  C0 0992           		lbr 	DRM_WriteBoth 								; has to, because the room clear repaints every byte of plane 0
+083A  0000              		.db 	0,0 										; and would otherwise leave the last room's red robots behind.
+                        															; Exactly five bytes, so nothing below here moves.
+083C                    DRM_ClearDone:
 
                         ; ---------------------------------------------------------------------------------------------------------------------------------------
                         ;										  Get West Door from room to the left's east door
@@ -536,18 +536,30 @@
                         ; COLOUR: PartialXORPlot moved to the $E00 page, where there is room for the plane-1
                         ; mirror. Its 76 bytes are padded rather than reclaimed so that every address below
                         ; here -- and every short branch that depends on one -- stays exactly where it was.
-0992  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-099A  00000000 00000000
-09A2  000000
-09A5  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-09AD  00000000 00000000
-09B5  000000
-09B8  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-09C0  00000000 00000000
-09C8  000000
-09CB  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-09D3  00000000 00000000
-09DB  000000
+0992                    DRM_WriteBoth: 												; COLOUR: one byte of the room, in both planes.
+0992  5F                		str 	rf 											; the frame/floor byte into plane 0...
+0993  9F                		ghi 	rf 											; ...and zero into the same offset in plane 1, so a robot
+0994  FC 02             		adi 	2 											; that was on screen when the room changed does not leave
+0996  BF                		phi 	rf 											; its red behind. The whole page is covered because the room
+0997  F8 00             		ldi 	0 											; clear walks every byte of it.
+0999  5F                		str 	rf
+099A  9F                		ghi 	rf
+099B  FF 02             		smi 	2
+099D  BF                		phi 	rf
+099E  1F                		inc 	rf
+099F  8F                		glo 	rf
+09A0  CA 0808           		lbnz 	DRM_ClearScreen
+09A3  C0 083C           		lbr 	DRM_ClearDone
+
+09A6  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+09AE  00000000 00000000
+09B6  000000
+09B9  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+09C1  00000000 00000000
+09C9  000000
+09CC  00000000 00000000 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+09D4  00000000 00000000
+09DC  0000
 
 09DE                    PlotCharacter:
 09DE  1C                		inc 	rc 											; advance to RC[3] which is the X position.
@@ -1828,36 +1840,37 @@ CP_1               0D1D    CP_HORIZONTAL      0D15    CRBT_0             0DA9
 CRBT_EXIT          0DF9    CRBT_LOOP          0D96    CRBT_NOTABS        0DD4
 CRBT_NOTFIRE       0DF4    CRBT_XPOSITION     0DB0    CRBT_YPOSITION     0DD9
 CREATEROBOT        0D89    DRAWROOM           0802    DRMWL_NOTLHB       08BF
-DRM_CLEARSCREEN    0808    DRM_FRAME          08EC    DRM_LIVES          093F
-DRM_LOOP1          0887    DRM_LRCLOSED       092A    DRM_LRDOOR         091C
-DRM_NEXT           08CA    DRM_NOBUMP         08DC    DRM_OPENLRDOOR     091F
-DRM_TBCLOSED       090B    DRM_TBDOOR         0900    DRM_VERTICALLOOP   089D
-DRM_VERTICALOPPOSITE                          0898    DRM_WALLHORIZONTAL 08AC
-DRM_WALLLEFT       08B9    DRM_WRITE          0837    DRM_WRITE00        081E
-DRM_WRITE08        0822    DRM_WRITE80        0826    DRM_WRITEF8        082A
-DRM_WRITEFF        082E    EASTDOOR           00E6 E  FRAMECOUNTER       00F0 E
-GETMISSILEGRAPHIC  0B02    GETPLAYERDIRECTION 0B47    GETPLAYERGRAPHIC   0B50
-GETROBOTGRAPHIC    0B05    GPG_LEFT           0B67    GPG_NOTALTERNATE   0B71
-GRAPHICS           0BD9    GRAPHICS_LEFT1     0BD9    GRAPHICS_LEFT2     0BDE
-GRAPHICS_MISSILE   0BED    GRAPHICS_RIGHT1    0BE3    GRAPHICS_RIGHT2    0BE8
-GRAPHICS_ROBOT     0BEF    HALT               0CF8    
-INITIALISEROOMANDPLAYER                       0975    IRM_CLEAR          097A
-KEYBOARDSTATE      00F1 E  LAUNCHMISSILE      0B7D    LIFELOST           0CB4
-LIVESLOST          00E8 E  LM_CANCEL          0BB3    LM_EXIT            0BB2
-MAINLOOP           0C45    MOVEDOWNROOM       0C8A    MOVEHROOM          0CA5
-MOVEHROOM2         0CB1    MOVELEFTROOM       0CA3    MOVEOBJECT         0A11
-MOVEOBJECTPOSITION 0ABC    MOVERIGHTROOM      0C9F    MOVEUPROOM         0C8E
-MOVEVROOM          0C90    MOVEVROOM2         0C9C    MO_CHECKCOLLISION  0AB2
-MO_CLEARNOTDRAWN   0AAE    MO_COLLIDE         0A7A    MO_DELETEMISSILE   0AA1
-MO_DONTDELETE      0A53    MO_ERASE           0A43    MO_INUSE           0A16
-MO_MOVEBACKWARDS   0A83    MO_NOUPDATEDIRECTION                          0A40
-MO_PLAYERHITFRAME  0AA7    MO_REDRAW          0A5F    MO_TIMETOMOVE      0A29
-NEWROOM            0C1D    NORTHDOOR          00E4 E  OBJECTCOUNT        000A E
-OBJECTEND          003C E  OBJECTLOOP         0C51    OBJECTRECORDSIZE   0006 E
-OBJECTSTART        0000 E  OUTPUTCHAR         0CE7    PARTIALXORPLOT     0E00
-PCCOMPLETE         0A0B    PCLOOP             0A03    
-PLAYERMISSILEOBJECT                           0006 E  PLAYEROBJECT       0000 E
-PLOTCHARACTER      09DE    PX_NOCOLLIDELEFTPART                          0E1A
+DRM_CLEARDONE      083C    DRM_CLEARSCREEN    0808    DRM_FRAME          08EC
+DRM_LIVES          093F    DRM_LOOP1          0887    DRM_LRCLOSED       092A
+DRM_LRDOOR         091C    DRM_NEXT           08CA    DRM_NOBUMP         08DC
+DRM_OPENLRDOOR     091F    DRM_TBCLOSED       090B    DRM_TBDOOR         0900
+DRM_VERTICALLOOP   089D    DRM_VERTICALOPPOSITE                          0898
+DRM_WALLHORIZONTAL 08AC    DRM_WALLLEFT       08B9    DRM_WRITE          0837
+DRM_WRITE00        081E    DRM_WRITE08        0822    DRM_WRITE80        0826
+DRM_WRITEBOTH      0992    DRM_WRITEF8        082A    DRM_WRITEFF        082E
+EASTDOOR           00E6 E  FRAMECOUNTER       00F0 E  GETMISSILEGRAPHIC  0B02
+GETPLAYERDIRECTION 0B47    GETPLAYERGRAPHIC   0B50    GETROBOTGRAPHIC    0B05
+GPG_LEFT           0B67    GPG_NOTALTERNATE   0B71    GRAPHICS           0BD9
+GRAPHICS_LEFT1     0BD9    GRAPHICS_LEFT2     0BDE    GRAPHICS_MISSILE   0BED
+GRAPHICS_RIGHT1    0BE3    GRAPHICS_RIGHT2    0BE8    GRAPHICS_ROBOT     0BEF
+HALT               0CF8    INITIALISEROOMANDPLAYER                       0975
+IRM_CLEAR          097A    KEYBOARDSTATE      00F1 E  LAUNCHMISSILE      0B7D
+LIFELOST           0CB4    LIVESLOST          00E8 E  LM_CANCEL          0BB3
+LM_EXIT            0BB2    MAINLOOP           0C45    MOVEDOWNROOM       0C8A
+MOVEHROOM          0CA5    MOVEHROOM2         0CB1    MOVELEFTROOM       0CA3
+MOVEOBJECT         0A11    MOVEOBJECTPOSITION 0ABC    MOVERIGHTROOM      0C9F
+MOVEUPROOM         0C8E    MOVEVROOM          0C90    MOVEVROOM2         0C9C
+MO_CHECKCOLLISION  0AB2    MO_CLEARNOTDRAWN   0AAE    MO_COLLIDE         0A7A
+MO_DELETEMISSILE   0AA1    MO_DONTDELETE      0A53    MO_ERASE           0A43
+MO_INUSE           0A16    MO_MOVEBACKWARDS   0A83    
+MO_NOUPDATEDIRECTION                          0A40    MO_PLAYERHITFRAME  0AA7
+MO_REDRAW          0A5F    MO_TIMETOMOVE      0A29    NEWROOM            0C1D
+NORTHDOOR          00E4 E  OBJECTCOUNT        000A E  OBJECTEND          003C E
+OBJECTLOOP         0C51    OBJECTRECORDSIZE   0006 E  OBJECTSTART        0000 E
+OUTPUTCHAR         0CE7    PARTIALXORPLOT     0E00    PCCOMPLETE         0A0B
+PCLOOP             0A03    PLAYERMISSILEOBJECT                           0006 E
+PLAYEROBJECT       0000 E  PLOTCHARACTER      09DE    
+PX_NOCOLLIDELEFTPART                          0E1A    
 PX_NOCOLLIDERIGHTPART                         0E33    PX_NOCOLLIDESINGLE 0E64
 PX_SHIFT0          0E5E    PX_SHIFT1          0E5D    PX_SHIFT2          0E5C
 PX_SHIFT3          0E5B    PX_SHIFT4          0E5A    PX_SHIFT5          0E59

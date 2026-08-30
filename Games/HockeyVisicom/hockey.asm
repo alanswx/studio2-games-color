@@ -46,6 +46,9 @@ LeftSc  = $800
 RightSc = $801
 Type    = $802
 BatSize = $803
+VideoPage = $11                         ; VISICOM: display, bit plane 0
+ColourPage = $13                        ; VISICOM: bit plane 1
+
 Paddles = $804
 BallX   = $810
 BallXI  = $811
@@ -134,9 +137,11 @@ NewPoint:
         phi     re                      ; and RE is set up for later
         ldi     0                       ; VISICOM: R1.1 is not zero here
         plo     rd
-_DrawFrame:
-        ldi     0             ; default is $00
-        str     rd
+_DrawFrame:                             ; COLOUR: the default write now clears the same
+        lbr     DrawFrameBoth           ; offset in plane 1 as it goes. The rink repaint
+_DFBack:                                ; rewrites every byte of plane 0, so without this
+                                        ; the paddles red would be XORed back off at every
+                                        ; point. Three bytes either way.
         glo     rd
         ani     $F8
         bz      _DrawSolid              ; top line
@@ -293,37 +298,10 @@ _NotPong:
         str     rf
         inc     rf
         phi     rb                      ; save mask in RB.1
-_DrawPaddle:
-        ghi     rb                      ; xor mask in
-        sex     re
-        xor
-        str     re
-
-; COLOUR: the right-hand player's paddle is mirrored into the second bit plane at $13xx, which turns it red where the left-hand
-; player and the rink stay cyan. It is a *tint*: the paddle is still written to plane 0 exactly as before, because the ball's
-; collision test reads the framebuffer back (see BallDraw, "AND with the screen"), so anything the ball must hit has to stay
-; there. Which side a paddle is on is bit 2 of RE.0 -- the byte column -- and paddles only ever move vertically, so the same
-; paddle takes the same plane on every draw and every erase and the XOR always cancels.
-
-        glo     re                      ; byte column: bit 2 set means the right half
-        ani     4
-        bz      _NoTint
-        ghi     re                      ; $11 -> $13, the second plane
-        adi     2
-        phi     re
-        ghi     rb                      ; the same mask, XORed in again
-        xor
-        str     re
-        ghi     re                      ; and back to plane 0
-        smi     2
-        phi     re
-_NoTint:
-        glo     re                      ; bump pointer to next line
-        adi     8
-        plo     re
-        dec     rd                      ; do it for the height
-        glo     rd
-        bnz     _DrawPaddle
+_DrawPaddle:                            ; COLOUR: the real loop is DrawPaddleBoth on
+        lbr     DrawPaddleBoth          ; the $B00 page, which draws player 2's paddles
+        .db     0,0,0,0,0,0,0,0,0       ; into both planes. Twelve bytes either way, so
+                                        ; nothing below here moves.
 _NextPDraw:
         glo     rf                      ; do all four paddles
         ani     $0F
@@ -583,16 +561,9 @@ _PaddleDown:
         glo     re                      ; update position
         adi     8
         str     rd
-_PMoveNow:
-        sex     re                      ; toggle top and bottom pixels
-        ghi     rb
-        xor
-        str     re
-        sex     rc
-        ghi     rb
-        xor
-        str     rc
-        br      _NextPaddle             ; and do the next one
+_PMoveNow:                              ; COLOUR: likewise -- the scroll has to move the
+        lbr     PMoveBoth               ; tint with the paddle, or the red stays behind at
+        .db     0,0,0,0,0,0,0           ; the old position. Ten bytes either way.
 
 _EndMovePaddles:
 
@@ -729,4 +700,110 @@ _SetYI: phi     rb
 
         .org    0BFFh                   ; fill it
         .db     0FFh
+
+; ***************************************************************************************************************************************
+;
+;                       Toshiba Visicom COM-100 colour -- player 2's paddles
+;
+;       The Visicom's 1861 fetches M(R0) and M(R0+$200) in the same DMA cycle and takes a bit from each, so a pixel in plane 0 alone
+;       is cyan and a pixel in both planes is red. Player 2's two paddles go into both; player 1's, the ball, the rink and the score
+;       stay in plane 0 alone.
+;
+;       This is a tint, never a move: the ball's collision test reads the framebuffer back (BallDraw, "AND with the screen"), so
+;       everything the ball can hit has to stay in plane 0. Adding plane 1 on top is invisible to that test.
+;
+;       Two things this has to get right, both of which the first attempt got wrong.
+;
+;       WHICH paddles. Not the ones on the right of the screen -- PadInfo puts the Right Striker at column 2, over on the left. It is
+;       bit 3 of the record address, which is the same test the game itself uses in _MovePaddles: Left Goalie $04, Left Striker $07,
+;       Right Goalie $0A, Right Striker $0D, so player 2 is $0A and $0D.
+;
+;       And EVERY write, not just the first. The game does not redraw a paddle when it moves; _PMoveNow toggles the pixel at each end
+;       and scrolls it. Tint only the initial draw and the red stays behind at the position the paddle started from, on every point,
+;       for the whole game. Both writes are mirrored here, so plane 1 follows plane 1-for-1 and can never drift -- and because it is
+;       a mirror rather than a rebuild, nothing is ever momentarily blank while the display is scanning it.
+;
+; ***************************************************************************************************************************************
+
+        .org    $B00
+
+; On entry RD -> the byte of the rink being painted. Clear the matching byte of plane 1.
+DrawFrameBoth:
+        ldi     0
+        str     rd                      ; the plane 0 default, as before
+        ghi     rd                      ; $11 -> $13
+        adi     2
+        phi     rd
+        ldi     0
+        str     rd                      ; and wipe plane 1 at the same offset
+        ghi     rd
+        smi     2
+        phi     rd
+        ldi     0                       ; leave D as _DrawFrame left it
+        lbr     _DFBack
+
+; On entry: RB.1 = mask, RE -> the paddle in plane 0, RD.0 = height, RF.0 = record base + 3.
+DrawPaddleBoth:
+        ghi     rb                      ; xor mask into plane 0, as before
+        sex     re
+        xor
+        str     re
+        glo     rf                      ; RF is at base+3 here; bit 3 of the base says
+        smi     3                       ; which player owns this paddle
+        ani     8
+        bz      _DPBNoTint
+        ghi     re                      ; $11 -> $13
+        adi     2
+        phi     re
+        ghi     rb                      ; the same mask into plane 1
+        xor
+        str     re
+        ghi     re
+        smi     2
+        phi     re
+_DPBNoTint:
+        glo     re                      ; bump pointer to next line
+        adi     8
+        plo     re
+        dec     rd                      ; do it for the height
+        glo     rd
+        bnz     DrawPaddleBoth
+        lbr     _NextPDraw
+
+; On entry: RB.1 = mask, RE -> the new end, RC -> the old end, RD -> the paddle record.
+PMoveBoth:
+        sex     re                      ; toggle top and bottom pixels
+        ghi     rb
+        xor
+        str     re
+        sex     rc
+        ghi     rb
+        xor
+        str     rc
+        glo     rd                      ; player 2 owns $0A and $0D
+        ani     8
+        bz      _PMBDone
+        ghi     re                      ; the same two toggles in plane 1
+        adi     2
+        phi     re
+        sex     re
+        ghi     rb
+        xor
+        str     re
+        ghi     re
+        smi     2
+        phi     re
+        ghi     rc
+        adi     2
+        phi     rc
+        sex     rc
+        ghi     rb
+        xor
+        str     rc
+        ghi     rc
+        smi     2
+        phi     rc
+_PMBDone:
+        lbr     _NextPaddle             ; and do the next one
+
         .end

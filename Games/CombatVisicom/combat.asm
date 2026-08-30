@@ -597,9 +597,9 @@ InitGame:
         ldi     0                       ; VISICOM: R1.1 is not zero here
         plo     re
 _ClearScreen:                           ; Clear the screen, possibly w/frame
-        ldi     0             ; zero it.
-        str     re
-        glo     rc                      ; check if framed ?
+        lbr     ClearScreenBoth         ; COLOUR: ...and clear plane 1 with it, or the
+_CSBack:                                ; tanks' red is left stranded wherever they were
+        glo     rc                      ; when the round ended. Three bytes either way.
         ani     $10
         bz      _CSNext
         glo     re                      ; RE = offset
@@ -873,6 +873,21 @@ KillMissile:                            ; the tail of the missile-expiry path,
         ldi     0                       ; lifted off the full $900 page
         str     ra
         lbr     MainLoop
+
+; On entry RE -> the screen byte being cleared. Zero it in BOTH planes.
+ClearScreenBoth:
+        ldi     0
+        str     re                      ; plane 0, as before
+        ghi     re                      ; $11 -> $13
+        adi     2
+        phi     re
+        ldi     0
+        str     re                      ; and the same offset in plane 1
+        ghi     re
+        smi     2
+        phi     re
+        ldi     0                       ; leave D as _ClearScreen left it
+        lbr     _CSBack
 
 TintPlane1:                             ; D = the byte just XORed into plane 0
         dec     r2

@@ -614,9 +614,9 @@
 0A34  F8 00                     ldi     0                       ; VISICOM: R1.1 is not zero here
 0A36  AE                        plo     re
 0A37                    _ClearScreen:                           ; Clear the screen, possibly w/frame
-0A37  F8 00                     ldi     0             ; zero it.
-0A39  5E                        str     re
-0A3A  8C                        glo     rc                      ; check if framed ?
+0A37  C0 0C0F                   lbr     ClearScreenBoth         ; COLOUR: ...and clear plane 1 with it, or the
+0A3A                    _CSBack:                                ; tanks' red is left stranded wherever they were
+0A3A  8C                        glo     rc                      ; when the round ended. Three bytes either way.
 0A3B  FA 10                     ani     $10
 0A3D  32 5A                     bz      _CSNext
 0A3F  8E                        glo     re                      ; RE = offset
@@ -884,7 +884,7 @@
 0C00                    ColourInit:
 0C00  F8 0C                     ldi     >TintPlane1             ; R7 is the tint routine's call pointer
 0C02  B7                        phi     r7
-0C03  F8 0F                     ldi     <TintPlane1
+0C03  F8 22                     ldi     <TintPlane1
 0C05  A7                        plo     r7
 0C06  C0 0A93                   lbr     Start
 
@@ -893,66 +893,82 @@
 0C0B  5A                        str     ra
 0C0C  C0 0900                   lbr     MainLoop
 
-0C0F                    TintPlane1:                             ; D = the byte just XORed into plane 0
-0C0F  22                        dec     r2
-0C10  52                        str     r2                      ; keep it; D is needed for the tests
-0C11  9F                        ghi     rf
-0C12  FB 10                     xri     $10                     ; a vehicle record, or ROM?
-0C14  3A 27                     bnz     _TPExit
-0C16  8F                        glo     rf
-0C17  FA 10                     ani     $10                     ; $1000 player 1, $1010 player 2
-0C19  32 27                     bz      _TPExit
-0C1B  9E                        ghi     re                      ; $11 -> $13
-0C1C  FC 02                     adi     2
-0C1E  BE                        phi     re
-0C1F  02                        ldn     r2                      ; the same byte, into the second plane
-0C20  EE                        sex     re
-0C21  F3                        xor
-0C22  5E                        str     re
-0C23  9E                        ghi     re                      ; and back to plane 0
-0C24  FF 02                     smi     2
-0C26  BE                        phi     re
-0C27                    _TPExit:
-0C27  12                        inc     r2                      ; drop the saved byte
-0C28  EE                        sex     re                      ; XORDraw expects X = E
-0C29  D4                        sep     r4                      ; return into XORDraw
-0C2A  30 0F                     br      TintPlane1              ; reentrant, like everything else here
+                        ; On entry RE -> the screen byte being cleared. Zero it in BOTH planes.
+0C0F                    ClearScreenBoth:
+0C0F  F8 00                     ldi     0
+0C11  5E                        str     re                      ; plane 0, as before
+0C12  9E                        ghi     re                      ; $11 -> $13
+0C13  FC 02                     adi     2
+0C15  BE                        phi     re
+0C16  F8 00                     ldi     0
+0C18  5E                        str     re                      ; and the same offset in plane 1
+0C19  9E                        ghi     re
+0C1A  FF 02                     smi     2
+0C1C  BE                        phi     re
+0C1D  F8 00                     ldi     0                       ; leave D as _ClearScreen left it
+0C1F  C0 0A3A                   lbr     _CSBack
 
-0C2C                            .end
+0C22                    TintPlane1:                             ; D = the byte just XORed into plane 0
+0C22  22                        dec     r2
+0C23  52                        str     r2                      ; keep it; D is needed for the tests
+0C24  9F                        ghi     rf
+0C25  FB 10                     xri     $10                     ; a vehicle record, or ROM?
+0C27  3A 3A                     bnz     _TPExit
+0C29  8F                        glo     rf
+0C2A  FA 10                     ani     $10                     ; $1000 player 1, $1010 player 2
+0C2C  32 3A                     bz      _TPExit
+0C2E  9E                        ghi     re                      ; $11 -> $13
+0C2F  FC 02                     adi     2
+0C31  BE                        phi     re
+0C32  02                        ldn     r2                      ; the same byte, into the second plane
+0C33  EE                        sex     re
+0C34  F3                        xor
+0C35  5E                        str     re
+0C36  9E                        ghi     re                      ; and back to plane 0
+0C37  FF 02                     smi     2
+0C39  BE                        phi     re
+0C3A                    _TPExit:
+0C3A  12                        inc     r2                      ; drop the saved byte
+0C3B  EE                        sex     re                      ; XORDraw expects X = E
+0C3C  D4                        sep     r4                      ; return into XORDraw
+0C3D  30 22                     br      TintPlane1              ; reentrant, like everything else here
+
+0C3F                            .end
                         ;
 
 
 00000 Total Error(s)
 
 BALLOON            0B84    CHECKMISSILES      097F    CHKEF3             0825
-CHKEXIT            0828    CHKKEY             081C    COLOURINIT         0C00
-DEAD               0A01    DRAWBALLOON        0B64    DRAWBARDEFENCE     0B6E
-DRAWDEFENCE        0B77    DRAWDIGIT          0803    DRAWMINES          0B48
-DRAWPROMPT         0B44    ENDMOVE            096E    GAMEOVER           0A32
-GAMETEST           0081 E  HLINE              0B90    INITGAME           0A34
-KILLMISSILE        0C09    LEFTSQGRAPHIC      0B92    MAINLOOP           0900
-MISSILEGRAPHIC     0BA6    MISTMR             10CF E  MOVEMISSILE        09D6
-MOVOBJ             086F    MOVTMR             10CE E  MVDOWN             0040 E
-MVLEFT             0020 E  MVRIGHT            0010 E  MVUP               0080 E
-NEWBATTLE          08B3    NOFORWARD          0954    NOTPLANE2          0946
-NOTURNLEFT         092B    NOTURNRIGHT        0936    PLANEGRAPHIC       0BD0
-PLANESPEED         0005 E  PROMPT             0B7E    R0                 0000 E
-R1                 0001 E  R2                 0002 E  R3                 0003 E
-R4                 0004 E  R5                 0005 E  R6                 0006 E
-R7                 0007 E  R8                 0008 E  R9                 0009 E
-RA                 000A E  RB                 000B E  RC                 000C E
-RD                 000D E  RE                 000E E  RF                 000F E
-RIGHTSQGRAPHIC     0B9C    SNDTMR             10CD E  START              0A93
-TANKGRAPHIC        0BA8    TANKSPEED          0004 E  TINTPLANE1         0C0F
-VLINE              0B8A    WAITTMR            0A2A    XORDRAW            082B
-_BALLOONS          0A77    _CHECKMINES        0A6E    _CLEARGAME         08B7
-_CLEARSCREEN       0A37    _CSEDGE            0A57    _CSLSD             0A53
-_CSNEXT            0A5A    _CSWNXT            0A59    _DDLOOP            080D
-_DEFANDBAR         0A7F    _DEFONLY           0A7B    _DRAWSPRITES       0A81
-_DSLOOP            0A84    _INITVEHICLE       08C0    _IV1               08CB
-_KILLME            09FF    _MOEXIT            08A9    _MONOTDOWN         0891
-_MONOTLEFT         089F    _MONOTUP           0888    _NOAUTOMOVE        0976
-_NOTPLANE1         0910    _NOTRIGHT          0A06    _NOTSLOW           098A
-_STARTGAME         0AD8    _TPEXIT            0C27    _WAITKEY           0AB4
-_WAITREL           0AD4    _XDNOBITSHIFT      0849    _XDRAWEXIT         0869
-_XDRAWLOOP         0833    _XSHIFTLOOP        083D
+CHKEXIT            0828    CHKKEY             081C    CLEARSCREENBOTH    0C0F
+COLOURINIT         0C00    DEAD               0A01    DRAWBALLOON        0B64
+DRAWBARDEFENCE     0B6E    DRAWDEFENCE        0B77    DRAWDIGIT          0803
+DRAWMINES          0B48    DRAWPROMPT         0B44    ENDMOVE            096E
+GAMEOVER           0A32    GAMETEST           0081 E  HLINE              0B90
+INITGAME           0A34    KILLMISSILE        0C09    LEFTSQGRAPHIC      0B92
+MAINLOOP           0900    MISSILEGRAPHIC     0BA6    MISTMR             10CF E
+MOVEMISSILE        09D6    MOVOBJ             086F    MOVTMR             10CE E
+MVDOWN             0040 E  MVLEFT             0020 E  MVRIGHT            0010 E
+MVUP               0080 E  NEWBATTLE          08B3    NOFORWARD          0954
+NOTPLANE2          0946    NOTURNLEFT         092B    NOTURNRIGHT        0936
+PLANEGRAPHIC       0BD0    PLANESPEED         0005 E  PROMPT             0B7E
+R0                 0000 E  R1                 0001 E  R2                 0002 E
+R3                 0003 E  R4                 0004 E  R5                 0005 E
+R6                 0006 E  R7                 0007 E  R8                 0008 E
+R9                 0009 E  RA                 000A E  RB                 000B E
+RC                 000C E  RD                 000D E  RE                 000E E
+RF                 000F E  RIGHTSQGRAPHIC     0B9C    SNDTMR             10CD E
+START              0A93    TANKGRAPHIC        0BA8    TANKSPEED          0004 E
+TINTPLANE1         0C22    VLINE              0B8A    WAITTMR            0A2A
+XORDRAW            082B    _BALLOONS          0A77    _CHECKMINES        0A6E
+_CLEARGAME         08B7    _CLEARSCREEN       0A37    _CSBACK            0A3A
+_CSEDGE            0A57    _CSLSD             0A53    _CSNEXT            0A5A
+_CSWNXT            0A59    _DDLOOP            080D    _DEFANDBAR         0A7F
+_DEFONLY           0A7B    _DRAWSPRITES       0A81    _DSLOOP            0A84
+_INITVEHICLE       08C0    _IV1               08CB    _KILLME            09FF
+_MOEXIT            08A9    _MONOTDOWN         0891    _MONOTLEFT         089F
+_MONOTUP           0888    _NOAUTOMOVE        0976    _NOTPLANE1         0910
+_NOTRIGHT          0A06    _NOTSLOW           098A    _STARTGAME         0AD8
+_TPEXIT            0C3A    _WAITKEY           0AB4    _WAITREL           0AD4
+_XDNOBITSHIFT      0849    _XDRAWEXIT         0869    _XDRAWLOOP         0833
+_XSHIFTLOOP        083D

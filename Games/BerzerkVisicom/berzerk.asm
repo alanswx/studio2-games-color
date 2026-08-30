@@ -129,11 +129,11 @@ DRM_WriteFF: 												; write top/bottom
 		xri 	7
 		bz 		DRM_WriteF8
 		ldi 	$FF
-DRM_Write: 													; write and fill whole screen
-		str 	rf
-		inc 	rf
-		glo 	rf
-		bnz 	DRM_ClearScreen
+DRM_Write: 													; COLOUR: this now writes BOTH planes -- see DRM_WriteBoth. It
+		lbr 	DRM_WriteBoth 								; has to, because the room clear repaints every byte of plane 0
+		.db 	0,0 										; and would otherwise leave the last room's red robots behind.
+															; Exactly five bytes, so nothing below here moves.
+DRM_ClearDone:
 
 ; ---------------------------------------------------------------------------------------------------------------------------------------
 ;										  Get West Door from room to the left's east door
@@ -519,10 +519,24 @@ IRM_Clear:													; fill everything with $FF
 ; COLOUR: PartialXORPlot moved to the $E00 page, where there is room for the plane-1
 ; mirror. Its 76 bytes are padded rather than reclaimed so that every address below
 ; here -- and every short branch that depends on one -- stays exactly where it was.
+DRM_WriteBoth: 												; COLOUR: one byte of the room, in both planes.
+		str 	rf 											; the frame/floor byte into plane 0...
+		ghi 	rf 											; ...and zero into the same offset in plane 1, so a robot
+		adi 	2 											; that was on screen when the room changed does not leave
+		phi 	rf 											; its red behind. The whole page is covered because the room
+		ldi 	0 											; clear walks every byte of it.
+		str 	rf
+		ghi 	rf
+		smi 	2
+		phi 	rf
+		inc 	rf
+		glo 	rf
+		lbnz 	DRM_ClearScreen
+		lbr 	DRM_ClearDone
+
 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+		.db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 
 PlotCharacter:
 		inc 	rc 											; advance to RC[3] which is the X position.
